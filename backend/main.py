@@ -157,12 +157,13 @@ def analyze(data: RepoRequest):
         nodes = []
         edges = []
         file_scores = {}
+        all_files = []
 
         skip_dirs = {
             ".git", "node_modules", "__pycache__", "dist", "build", ".venv"
         }
 
-        # 🔹 WALK FILES
+        # 🔹 FIRST PASS: Collect files and build scores
         for root, dirs, files in os.walk(repo_path):
             dirs[:] = [d for d in dirs if d not in skip_dirs]
 
@@ -176,21 +177,13 @@ def analyze(data: RepoRequest):
                     os.path.relpath(full_path, repo_path)
                 )
 
+                all_files.append((root, file, relative_path))
+
                 try:
                     with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                         content = f.read()
                 except:
                     content = ""
-
-                # ✅ NODE
-                nodes.append({
-                    "id": relative_path,
-                    "type": get_file_type(file),
-                    "role": classify_role(relative_path),
-                    "summary": simple_summary(file),
-                    "preview": content[:200],
-                    "folder": relative_path.split("/")[0] if "/" in relative_path else "root"
-                })
 
                 # =========================
                 # 🔹 JS / TS
@@ -231,6 +224,27 @@ def analyze(data: RepoRequest):
                     for imp in imports:
                         target = imp + ".py"
                         edges.append({"source": relative_path, "target": target})
+
+        # 🔹 SECOND PASS: Build nodes with impact scores
+        for root, file, relative_path in all_files:
+            full_path = os.path.join(root, file)
+
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+            except:
+                content = ""
+
+            # ✅ NODE
+            nodes.append({
+                "id": relative_path,
+                "type": get_file_type(file),
+                "role": classify_role(relative_path),
+                "summary": simple_summary(file),
+                "preview": content[:200],
+                "folder": relative_path.split("/")[0] if "/" in relative_path else "root",
+                "impact": file_scores.get(relative_path, 0)
+            })
 
         # =========================
         # 🔹 CLEAN EDGES
@@ -300,9 +314,18 @@ class QueryRequest(BaseModel):
 @app.post("/query-repo")
 def query_repo(data: QueryRequest):
     query_lower = data.query.lower()
-    relevant = [n["path"] for n in data.nodes if query_lower in n["path"].lower() or (n.get("summary") and query_lower in n.get("summary").lower())]
+    relevant = [
+        n for n in data.nodes
+        if query_lower in n["id"].lower() or
+           (n.get("summary") and query_lower in n.get("summary").lower()) or
+           query_lower in n.get("role", "").lower() or
+           query_lower in n.get("type", "").lower()
+    ]
+    
+    # Rank by impact score descending
+    relevant_sorted = sorted(relevant, key=lambda n: n.get("impact", 0), reverse=True)
     
     return {
         "explanation": f"Based on your query '{data.query}', we found {len(relevant)} relevant file(s).",
-        "relevant_paths": relevant[:5]
+        "relevant_paths": [n["id"] for n in relevant_sorted[:5]]
     }
