@@ -1,78 +1,466 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Repograph Clone</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RepoGraph - Kinetic Blueprint</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<script id="tailwind-config">
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    surface: "#12121f",
+                    "surface-container-lowest": "#0d0d1a",
+                    "surface-container": "#1e1e2c",
+                    "surface-container-high": "#292937",
+                    "surface-container-highest": "#343342",
+                    primary: "#f72585",
+                    "primary-container": "#ff4992",
+                    secondary: "#4361ee",
+                    tertiary: "#2ec4b6",
+                    "on-surface": "#e3e0f4",
+                    "outline-variant": "#2a2a4a",
+                },
+                fontFamily: {
+                    headline: ["Space Grotesk", "sans-serif"],
+                    body: ["Inter", "sans-serif"],
+                    mono: ["JetBrains Mono", "monospace"]
+                }
+            }
+        }
+    }
+</script>
+
+<style>
+    body {
+        background-color: #0d0d1a;
+        margin: 0;
+        overflow: hidden;
+        font-family: 'Inter', sans-serif;
+    }
+    .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    #graph-container {
+        width: 100%;
+        height: 100%;
+    }
+    .node { cursor: pointer; stroke-width: 0px; transition: filter 0.3s ease; }
+    .link { stroke: #5a3f47; stroke-opacity: 0.4; stroke-width: 1px; }
+    .label { font-family: 'Space Grotesk', sans-serif; font-size: 10px; fill: #e3e0f4; pointer-events: none; text-transform: uppercase; letter-spacing: 0.05em; }
+    
+    .glass-panel {
+        background: rgba(13, 13, 26, 0.85);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .node-glow { filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6)); }
+    .active-glow { filter: drop-shadow(0 0 12px rgba(247, 37, 133, 0.8)); }
+    
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #0d0d1a; }
+    ::-webkit-scrollbar-thumb { background: #343342; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #f72585; }
+
+    .collapsible-content {
+        max-height: 800px;
+        overflow: hidden;
+        transition: max-height 0.4s ease, opacity 0.3s ease;
+    }
+    .collapsed .collapsible-content {
+        max-height: 0;
+        opacity: 0;
+        pointer-events: none;
+    }
+    
+    .stats-enter { opacity: 0; transform: translateY(-10px); display: none; }
+    .stats-active { opacity: 1; transform: translateY(0); display: flex; }
+</style>
 </head>
-<body>
+<body class="bg-surface-container-lowest text-on-surface antialiased overflow-hidden w-screen h-screen flex flex-col">
 
-    <nav class="navbar">
-        <div class="logo">
-            <div class="logo-box">☩</div>
-            <span>Repograph</span>
+<!-- Top Header -->
+<header class="fixed top-0 left-0 w-full h-[56px] z-[70] bg-[#0a0a1a]/90 backdrop-blur-md border-b border-outline-variant flex items-center px-6">
+    <div class="flex justify-between items-center w-full gap-4">
+        <div class="flex items-center gap-3 shrink-0">
+            <div class="w-8 h-8 flex items-center justify-center text-secondary drop-shadow-[0_0_8px_rgba(67,97,238,0.4)]">
+                <span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">hexagon</span>
+            </div>
+            <h1 class="font-headline font-bold text-xl tracking-tighter text-white">RepoGraph</h1>
         </div>
-    </nav>
-
-    <header class="hero">
-        <div class="badge">✨ AI-powered architecture maps for any GitHub repo</div>
-        <h1>Onboard a senior engineer <br> <span class="purple-gradient">in under a minute.</span></h1>
-        <p class="description">
-            Paste a GitHub URL. Repograph parses the source, ranks every file by impact, and <br>
-            generates an interactive map of the codebase — with AI summaries, an onboarding <br>
-            path, and natural-language search.
-        </p>
-
-        <div class="search-container">
-            <div class="search-box">
-                <div class="input-group">
-                    <span class="link-icon">🔗</span>
-                    <input type="text" id="repo-input" placeholder="https://github.com/owner/repo">
+        <div class="flex items-center gap-2 flex-1 justify-center max-w-[700px]">
+            <div class="relative w-[420px]">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[18px]">link</span>
+                <input class="w-full h-9 bg-surface-container border border-outline-variant rounded-lg px-9 text-sm font-mono text-white focus:outline-none focus:ring-1 focus:ring-secondary transition-all placeholder:text-slate-600" placeholder="Paste GitHub repo URL — https://github.com/owner/repo" type="text"/>
+            </div>
+            <button class="h-9 px-4 bg-secondary text-white text-sm font-medium rounded-lg hover:bg-opacity-80 active:scale-95 transition-all flex items-center gap-2" id="analyze-btn" onclick="handleAnalyze()">
+                <span id="btn-text">Analyze</span>
+                <span class="material-symbols-outlined text-[18px]" id="btn-icon">arrow_forward</span>
+                <div class="hidden animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full" id="btn-spinner"></div>
+            </button>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+            <div class="stats-enter items-center gap-2 transition-all duration-500" id="graph-stats">
+                <div class="flex items-center px-3 py-1 bg-surface-container border border-outline-variant rounded-lg">
+                    <span class="material-symbols-outlined text-[14px] text-tertiary mr-1.5" style="font-variation-settings: 'FILL' 1;">hub</span>
+                    <span class="text-xs font-mono text-on-surface">14 <span class="text-slate-500 ml-0.5">nodes</span></span>
                 </div>
-                <button id="analyze-btn">Map repo <span>→</span></button>
+                <div class="flex items-center px-3 py-1 bg-surface-container border border-outline-variant rounded-lg">
+                    <span class="material-symbols-outlined text-[14px] text-secondary mr-1.5" style="font-variation-settings: 'FILL' 1;">account_tree</span>
+                    <span class="text-xs font-mono text-on-surface">16 <span class="text-slate-500 ml-0.5">edges</span></span>
+                </div>
+            </div>
+            <div class="flex items-center border-l border-outline-variant ml-2 pl-4 gap-1">
+                <button class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-full transition-all">
+                    <span class="material-symbols-outlined">settings</span>
+                </button>
             </div>
         </div>
+    </div>
+</header>
 
-        <div class="suggestions">
-            Try: <button class="chip">vercel/swr</button> <button class="chip">honojs/hono</button> <button class="chip">pmndrs/zustand</button>
-        </div>
-    </header>
+<!-- Left Sidebar -->
+<aside class="fixed left-0 top-[56px] h-[calc(100vh-56px)] w-64 z-[40] bg-surface-container-lowest border-r border-outline-variant flex flex-col py-6 px-4">
+    <div class="mb-8 px-4">
+        <div class="text-primary font-black font-headline text-xs uppercase tracking-widest">NAVIGATOR</div>
+        <div class="text-slate-500 text-[10px] font-mono tracking-widest mt-1">v2.0.4-stable</div>
+    </div>
+    <nav class="flex-1 flex flex-col gap-1">
+        <a class="flex items-center gap-3 px-4 py-3 text-primary bg-primary/10 border-l-4 border-primary font-headline text-xs uppercase tracking-widest hover:bg-white/5 transition-all" href="#">
+            <span class="material-symbols-outlined text-sm">hub</span> Architecture
+        </a>
+        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 font-headline text-xs uppercase tracking-widest hover:bg-white/5 transition-all" href="#">
+            <span class="material-symbols-outlined text-sm">terminal</span> Logic
+        </a>
+        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 font-headline text-xs uppercase tracking-widest hover:bg-white/5 transition-all" href="#">
+            <span class="material-symbols-outlined text-sm">settings_input_component</span> Utility
+        </a>
+        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 font-headline text-xs uppercase tracking-widest hover:bg-white/5 transition-all" href="#">
+            <span class="material-symbols-outlined text-sm">fact_check</span> Test Suite
+        </a>
+    </nav>
+</aside>
 
-    <section class="features-grid">
-        <div class="feature-card">
-            <div class="icon-wrapper">🕸️</div>
-            <h3>Visual dependency graph</h3>
-            <p>Every file is a node, every import is an edge. Entry points, business logic, utilities and integrations are color-coded.</p>
+<!-- Main Graph Area -->
+<main class="fixed left-64 top-[56px] w-[calc(100vw-16rem)] h-[calc(100vh-56px)]">
+    <!-- D3 Container -->
+    <div id="graph-container"></div>
+    
+    <!-- Floating Onboarding Path (Top Left) -->
+    <aside class="absolute top-6 left-6 w-[280px] glass-panel rounded-[12px] z-[50] shadow-2xl transition-all duration-300 group" id="onboardingPanel">
+        <div class="p-4 cursor-pointer flex items-center justify-between select-none" onclick="document.getElementById('onboardingPanel').classList.toggle('collapsed')">
+            <div class="flex flex-col">
+                <h2 class="font-headline font-bold text-[11px] tracking-[0.1em] text-primary uppercase flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[14px]">auto_stories</span>
+                    Onboarding Path
+                </h2>
+                <p class="text-[10px] text-slate-400 mt-1">Read in this order</p>
+            </div>
+            <span class="material-symbols-outlined text-slate-400 transition-transform group-[.collapsed]:rotate-180">expand_more</span>
         </div>
-        <div class="feature-card">
-            <div class="icon-wrapper">📖</div>
-            <h3>Generated onboarding path</h3>
-            <p>An ordered reading list of the 5–10 files a new developer should open first to reach a working mental model fast.</p>
+        <div class="collapsible-content">
+            <div class="p-4 pt-0 space-y-3">
+                <div class="flex gap-3 p-3 rounded-lg bg-surface-container/50 hover:bg-surface-container-high border border-outline-variant/50 transition-all cursor-pointer" onclick="fillQuery('API_GATEWAY')">
+                    <div class="flex-shrink-0 w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold text-white">1</div>
+                    <div class="flex flex-col">
+                        <span class="font-mono text-[11px] text-white tracking-tight">API_GATEWAY</span>
+                        <span class="text-[10px] text-slate-400 mt-1">Bootstrapper and entry root.</span>
+                    </div>
+                </div>
+                <div class="flex gap-3 p-3 rounded-lg bg-surface-container/50 hover:bg-surface-container-high border border-outline-variant/50 transition-all cursor-pointer" onclick="fillQuery('AUTH_SERVICE')">
+                    <div class="flex-shrink-0 w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold text-white">2</div>
+                    <div class="flex flex-col">
+                        <span class="font-mono text-[11px] text-white tracking-tight">AUTH_SERVICE</span>
+                        <span class="text-[10px] text-slate-400 mt-1">Core authentication & session.</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="feature-card">
-            <div class="icon-wrapper">🔍</div>
-            <h3>Ask the codebase</h3>
-            <p>“Where is auth handled?” Get a highlighted subgraph and a plain-English answer in seconds.</p>
-        </div>
-        <div class="feature-card">
-            <div class="icon-wrapper">⚡</div>
-            <h3>High-impact hotspots</h3>
-            <p>Files that many others depend on are flagged. You instantly see where a change carries the most risk.</p>
-        </div>
-        <div class="feature-card">
-            <div class="icon-wrapper">✨</div>
-            <h3>AI summaries on every node</h3>
-            <p>Each file gets a one-sentence purpose statement, no more guessing what code actually does.</p>
-        </div>
-        <div class="feature-card">
-            <div class="icon-wrapper">🐙</div>
-            <h3>Works on any public repo</h3>
-            <p>No setup, no installation, no credentials. Paste a URL — get an architecture map.</p>
-        </div>
-    </section>
+    </aside>
 
-    <script src="script.js"></script>
+    <!-- Floating Legend (Top Right) -->
+    <div class="absolute top-6 right-6 z-30 glass-panel p-4 rounded-sm shadow-xl min-w-[160px]">
+        <div class="text-[10px] font-black tracking-widest text-slate-500 uppercase mb-3 border-b border-outline-variant pb-2">Legend</div>
+        <div class="space-y-2">
+            <div class="flex items-center gap-3"><span class="w-3 h-3 bg-[#e85d04]"></span><span class="text-[10px] font-headline uppercase text-slate-300">Entry Points</span></div>
+            <div class="flex items-center gap-3"><span class="w-3 h-3 bg-[#4361ee]"></span><span class="text-[10px] font-headline uppercase text-slate-300">Core Logic</span></div>
+            <div class="flex items-center gap-3"><span class="w-3 h-3 bg-[#6c757d]"></span><span class="text-[10px] font-headline uppercase text-slate-300">Utility</span></div>
+            <div class="flex items-center gap-3"><span class="w-3 h-3 bg-[#7b2d8b]"></span><span class="text-[10px] font-headline uppercase text-slate-300">External</span></div>
+            <div class="flex items-center gap-3"><span class="w-3 h-3 bg-[#2ec4b6]"></span><span class="text-[10px] font-headline uppercase text-slate-300">Config</span></div>
+        </div>
+    </div>
+
+    <!-- Metric Overlay (Bottom Left) -->
+    <div class="absolute bottom-6 left-6 z-30 pointer-events-none">
+        <div class="flex items-end gap-2">
+            <div class="text-6xl font-bold font-headline tracking-tighter text-white">14</div>
+            <div class="text-xs text-primary font-headline uppercase tracking-[0.2em] mb-3">Active Nodes</div>
+        </div>
+    </div>
+
+    <!-- Natural Language Query Bar (Bottom Center) -->
+    <div class="absolute bottom-6 left-0 w-full z-[60] flex flex-col items-center pointer-events-none">
+        <div class="flex gap-3 mb-4 pointer-events-auto transition-all duration-300" id="query-suggestions">
+            <button class="glass-panel px-4 py-2 rounded-full text-xs text-slate-400 hover:text-primary transition-all" onclick="fillQuery('Where is auth handled?')">"Where is auth handled?"</button>
+            <button class="glass-panel px-4 py-2 rounded-full text-xs text-slate-400 hover:text-primary transition-all" onclick="fillQuery('Show entry points')">"Show entry points"</button>
+        </div>
+        <div class="w-full max-w-[600px] pointer-events-auto mx-auto flex flex-col">
+            <div class="hidden opacity-0 -translate-y-2 bg-surface-container border border-outline-variant border-b-0 rounded-t-[24px] p-6 text-on-surface transition-all duration-500 ease-out" id="query-result-panel">
+                <div class="flex justify-between items-start mb-4">
+                    <span class="text-primary text-xs font-headline font-bold uppercase tracking-widest">System Response</span>
+                    <button class="text-slate-500 hover:text-white text-[10px] font-bold" onclick="clearQuery()">CLEAR</button>
+                </div>
+                <div class="text-sm text-slate-200" id="result-content"></div>
+            </div>
+            <div class="flex items-center bg-surface-container border border-outline-variant rounded-full p-2 pl-6 gap-3 shadow-2xl transition-all duration-300 focus-within:ring-1 focus-within:ring-primary/50" id="query-bar">
+                <span class="material-symbols-outlined text-slate-500">search</span>
+                <input class="flex-1 bg-transparent border-none focus:ring-0 text-white font-headline text-sm py-2 outline-none" id="query-input" placeholder="Ask the codebase..." type="text"/>
+                <button class="bg-secondary text-white px-6 py-2 rounded-full font-headline font-bold text-xs hover:opacity-90 active:scale-95" onclick="submitQuery()">Ask →</button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Right File Inspector Panel -->
+<aside class="fixed right-0 top-[56px] h-[calc(100vh-56px)] w-[340px] z-[80] bg-surface-container border-l border-outline-variant shadow-[-10px_0_30px_rgba(0,0,0,0.5)] flex flex-col transition-transform duration-500 ease-in-out translate-x-full" id="fileInspector">
+    <div class="p-6 pb-4 relative border-b border-outline-variant/50">
+        <button class="absolute top-4 right-4 text-slate-500 hover:text-white" onclick="closeInspector()">
+            <span class="material-symbols-outlined text-lg">close</span>
+        </button>
+        <div class="mb-4">
+            <p class="text-[10px] uppercase tracking-widest text-slate-500 mb-1">File System</p>
+            <h2 class="text-xl font-mono font-bold text-white tracking-tight break-all" id="inspector-title">node.ts</h2>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-secondary" id="inspector-dot"></span>
+            <span class="text-xs font-semibold text-slate-300" id="inspector-category">Core Logic</span>
+        </div>
+    </div>
+    
+    <div class="px-6 py-4 bg-tertiary/10 border-b border-tertiary/20 flex items-center gap-3">
+        <span class="material-symbols-outlined text-tertiary text-sm">warning</span>
+        <span class="text-[11px] font-bold text-tertiary uppercase tracking-wider" id="inspector-impact">High Impact</span>
+    </div>
+
+    <div class="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        <section>
+            <div class="flex items-center gap-2 mb-3">
+                <span class="material-symbols-outlined text-sm text-primary">auto_awesome</span>
+                <h3 class="text-[11px] uppercase tracking-widest text-white/50 font-semibold">AI Intelligence</h3>
+            </div>
+            <div class="bg-surface-container-high p-4 rounded-lg border border-outline-variant/50 text-xs text-slate-300 leading-relaxed italic" id="inspector-desc">
+                Core routing logic and middleware application.
+            </div>
+        </section>
+        <section>
+            <h3 class="text-[11px] uppercase font-semibold text-white/50 mb-3 tracking-widest">Imports</h3>
+            <div class="flex flex-wrap gap-2 text-[10px] font-mono text-slate-400">
+                <span class="bg-surface-container-lowest border border-outline-variant px-2 py-1.5 rounded">fs</span>
+                <span class="bg-surface-container-lowest border border-outline-variant px-2 py-1.5 rounded">express</span>
+                <span class="bg-surface-container-lowest border border-outline-variant px-2 py-1.5 rounded">bcrypt</span>
+            </div>
+        </section>
+    </div>
+    
+    <div class="p-6 border-t border-outline-variant">
+        <button class="w-full py-3 bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold text-xs uppercase tracking-widest rounded-sm hover:opacity-90 active:scale-95 transition-all">
+            Open in Editor
+        </button>
+    </div>
+</aside>
+
+<div class="fixed pointer-events-none z-[100] glass-panel px-3 py-2 text-[10px] font-headline text-white uppercase rounded-sm hidden" id="tooltip"></div>
+
+<script>
+    // D3 GRAPH LOGIC AND DATA
+    window.GRAPH_DATA = {
+        nodes: [
+            { id: "API_GATEWAY", category: "entry", impact: 5, desc: "Primary entry point routing external requests to microservices." },
+            { id: "AUTH_SERVICE", category: "core", impact: 4, desc: "Handles JWT validation, OAuth flows and session management." },
+            { id: "USER_DB", category: "core", impact: 5, desc: "PostgreSQL ORM models and migrations." },
+            { id: "ORDER_PROC", category: "core", impact: 3, desc: "Processes transactions and inventory locking." },
+            { id: "STRIPE_API", category: "external", impact: 2, desc: "Webhook listener and payment integration." },
+            { id: "LOG_UTIL", category: "util", impact: 1, desc: "Winston logger custom transport configurations." },
+            { id: "ENV_CONFIG", category: "config", impact: 1, desc: "Environment variable parser and default fallbacks." },
+            { id: "REDIS_CACHE", category: "core", impact: 4, desc: "In-memory caching for active sessions and rates." },
+            { id: "UNIT_TESTS", category: "test", impact: 1, desc: "Jest test suites for core logic validation." },
+            { id: "INTEG_TESTS", category: "test", impact: 2, desc: "Supertest endpoints verification." },
+            { id: "S3_BUCKET", category: "external", impact: 3, desc: "AWS SDK configuration for static assets." },
+            { id: "IMAGE_RESIZER", category: "util", impact: 2, desc: "Sharp-based image optimization utility." },
+            { id: "MAIL_SERVICE", category: "external", impact: 1, desc: "SendGrid email templates and dispatcher." },
+            { id: "FRONTEND_UI", category: "entry", impact: 5, desc: "React/Vite compiled static bundle serving." }
+        ],
+        links: [
+            { source: "API_GATEWAY", target: "AUTH_SERVICE" },
+            { source: "API_GATEWAY", target: "ORDER_PROC" },
+            { source: "AUTH_SERVICE", target: "USER_DB" },
+            { source: "ORDER_PROC", target: "USER_DB" },
+            { source: "ORDER_PROC", target: "STRIPE_API" },
+            { source: "USER_DB", target: "REDIS_CACHE" },
+            { source: "API_GATEWAY", target: "LOG_UTIL" },
+            { source: "AUTH_SERVICE", target: "LOG_UTIL" },
+            { source: "ORDER_PROC", target: "LOG_UTIL" },
+            { source: "API_GATEWAY", target: "ENV_CONFIG" },
+            { source: "UNIT_TESTS", target: "AUTH_SERVICE" },
+            { source: "INTEG_TESTS", target: "API_GATEWAY" },
+            { source: "FRONTEND_UI", target: "API_GATEWAY" },
+            { source: "ORDER_PROC", target: "S3_BUCKET" },
+            { source: "IMAGE_RESIZER", target: "S3_BUCKET" },
+            { source: "API_GATEWAY", target: "MAIL_SERVICE" }
+        ]
+    };
+
+    const categoryColors = {
+        entry: "#e85d04", core: "#4361ee", util: "#6c757d", external: "#7b2d8b", config: "#2ec4b6", test: "#444444"
+    };
+
+    const width = window.innerWidth - 256; 
+    const height = window.innerHeight - 56;
+
+    const svg = d3.select("#graph-container").append("svg")
+        .attr("width", "100%")
+        .attr("height", "100%")
+        .call(d3.zoom().on("zoom", e => container.attr("transform", e.transform)))
+        .on("click", (event) => { 
+            if(event.target.tagName === 'svg') {
+                resetSelection(); 
+                closeInspector(); 
+            }
+        });
+
+    svg.append("defs").append("marker")
+        .attr("id", "arrowhead")
+        .attr("viewBox", "0 -5 10 10")
+        .attr("refX", 22)
+        .attr("refY", 0)
+        .attr("markerWidth", 5).attr("markerHeight", 5)
+        .attr("orient", "auto").append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#2a2a4a");
+
+    const container = svg.append("g");
+
+    const simulation = d3.forceSimulation(window.GRAPH_DATA.nodes)
+        .force("link", d3.forceLink(window.GRAPH_DATA.links).id(d => d.id).distance(120))
+        .force("charge", d3.forceManyBody().strength(-600))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collision", d3.forceCollide().radius(d => 12 + (d.impact * 3)));
+
+    const link = container.append("g").selectAll("line")
+        .data(window.GRAPH_DATA.links).enter().append("line")
+        .attr("class", "link").attr("marker-end", "url(#arrowhead)");
+
+    const tooltip = d3.select("#tooltip");
+
+    const node = container.append("g").selectAll("g")
+        .data(window.GRAPH_DATA.nodes).enter().append("g")
+        .call(d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended))
+        .on("mouseover", (event, d) => {
+            tooltip.style("display", "block")
+                .html(`[ ${d.category} ]<br/>${d.id}`)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px");
+        })
+        .on("mouseout", () => tooltip.style("display", "none"));
+
+    node.append("circle")
+        .attr("class", "node")
+        .attr("r", d => 8 + (d.impact * 2))
+        .attr("fill", d => categoryColors[d.category] || "#fff")
+        .on("click", (e, d) => { e.stopPropagation(); selectNode(d); openInspector(d); });
+
+    node.append("text").attr("class", "label")
+        .attr("dx", d => 12 + (d.impact * 2)).attr("dy", 4).text(d => d.id);
+
+    simulation.on("tick", () => {
+        link.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+        node.attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+    function selectNode(selectedD) {
+        const neighbors = new Set([selectedD.id]);
+        window.GRAPH_DATA.links.forEach(l => {
+            if (l.source.id === selectedD.id) neighbors.add(l.target.id);
+            if (l.target.id === selectedD.id) neighbors.add(l.source.id);
+        });
+
+        node.style("opacity", d => neighbors.has(d.id) ? 1 : 0.15);
+        link.style("opacity", l => neighbors.has(l.source.id) && neighbors.has(l.target.id) ? 1 : 0.1);
+        node.selectAll("circle").attr("fill", d => d.id === selectedD.id ? "#f72585" : categoryColors[d.category]);
+        node.selectAll("circle").classed("active-glow", d => d.id === selectedD.id);
+    }
+    
+    function resetSelection() {
+        node.style("opacity", 1); link.style("opacity", 1);
+        node.selectAll("circle").attr("fill", d => categoryColors[d.category]).classed("active-glow", false);
+    }
+
+    function dragstarted(event) { if (!event.active) simulation.alphaTarget(0.3).restart(); event.subject.fx = event.subject.x; event.subject.fy = event.subject.y; }
+    function dragged(event) { event.subject.fx = event.x; event.subject.fy = event.y; }
+    function dragended(event) { if (!event.active) simulation.alphaTarget(0); event.subject.fx = null; event.subject.fy = null; }
+
+    // UI Functions
+    function handleAnalyze() {
+        document.getElementById('btn-icon').classList.add('hidden');
+        document.getElementById('btn-spinner').classList.remove('hidden');
+        setTimeout(() => {
+            document.getElementById('btn-icon').classList.remove('hidden');
+            document.getElementById('btn-spinner').classList.add('hidden');
+            document.getElementById('graph-stats').classList.replace('stats-enter', 'stats-active');
+        }, 1200);
+    }
+
+    function openInspector(d) {
+        document.getElementById('fileInspector').classList.remove('translate-x-full');
+        document.getElementById('inspector-title').innerText = d.id + ".ts";
+        document.getElementById('inspector-category').innerText = d.category.toUpperCase() + " TIER";
+        document.getElementById('inspector-dot').style.backgroundColor = categoryColors[d.category];
+        document.getElementById('inspector-desc').innerText = d.desc;
+        document.getElementById('inspector-impact').innerText = "Impact Score: " + d.impact;
+    }
+    
+    function closeInspector() { 
+        document.getElementById('fileInspector').classList.add('translate-x-full'); 
+    }
+
+    // Natural Language Query Handlers
+    function fillQuery(txt) { 
+        document.getElementById('query-input').value = txt; 
+        submitQuery(); 
+    }
+    
+    function submitQuery() {
+        const val = document.getElementById('query-input').value;
+        if(!val) return;
+        
+        // Highlight matching node if exists
+        let match = window.GRAPH_DATA.nodes.find(n => val.toUpperCase().includes(n.id));
+        if(match) { selectNode(match); openInspector(match); }
+
+        document.getElementById('query-suggestions').classList.add('hidden');
+        document.getElementById('result-content').innerHTML = `Looking into: "<strong>${val}</strong>". AI analysis completed.`;
+        document.getElementById('query-result-panel').classList.remove('hidden');
+        setTimeout(() => document.getElementById('query-result-panel').classList.remove('opacity-0', '-translate-y-2'), 10);
+        document.getElementById('query-bar').classList.remove('rounded-full');
+        document.getElementById('query-bar').classList.add('rounded-b-[24px]');
+    }
+    
+    function clearQuery() {
+        document.getElementById('query-input').value = '';
+        document.getElementById('query-result-panel').classList.add('opacity-0', '-translate-y-2');
+        setTimeout(() => {
+            document.getElementById('query-result-panel').classList.add('hidden');
+            document.getElementById('query-bar').classList.add('rounded-full');
+            document.getElementById('query-bar').classList.remove('rounded-b-[24px]');
+            document.getElementById('query-suggestions').classList.remove('hidden');
+        }, 300);
+        resetSelection();
+        closeInspector();
+    }
+</script>
 </body>
 </html>

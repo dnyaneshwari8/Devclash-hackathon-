@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RepoGraph - Test Suite</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="style.css" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+        darkMode: "class",
+        theme: { extend: { colors: { surface: "#12121f", "surface-container-lowest": "#0d0d1a", "surface-container": "#1e1e2c", "surface-container-high": "#292937", primary: "#f72585", secondary: "#4361ee", tertiary: "#2ec4b6", "on-surface": "#e3e0f4", "outline-variant": "#2a2a4a" }, fontFamily: { headline: ["Space Grotesk","sans-serif"], mono: ["JetBrains Mono","monospace"] } } }
+    }
+</script>
+<style>body { background-color: #0d0d1a; margin: 0; font-family: 'Inter', sans-serif; } .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }</style>
+</head>
+<body class="bg-[#0d0d1a] text-[#e3e0f4] w-screen h-screen flex overflow-hidden">
+
+<!-- Left Sidebar -->
+<aside class="fixed left-0 top-0 h-screen w-64 z-40 bg-[#0d0d1a] border-r border-[#2a2a4a] flex flex-col py-6 px-4">
+    <div class="mb-8 px-4">
+        <div class="flex items-center gap-2 mb-4">
+            <span class="material-symbols-outlined text-[#4361ee] text-3xl" style="font-variation-settings:'FILL' 1;">hexagon</span>
+            <span class="font-bold text-xl tracking-tighter text-white" style="font-family:'Space Grotesk',sans-serif;">RepoGraph</span>
+        </div>
+        <div class="text-[#f72585] font-black text-xs uppercase tracking-widest" style="font-family:'Space Grotesk',sans-serif;">NAVIGATOR</div>
+        <div class="text-slate-500 text-[10px] font-mono tracking-widest mt-1">v2.0.4-stable</div>
+    </div>
+    <nav class="flex-1 flex flex-col gap-1">
+        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 text-xs uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="index.html"><span class="material-symbols-outlined text-sm">hub</span> Architecture</a>
+        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 text-xs uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="logic.html"><span class="material-symbols-outlined text-sm">terminal</span> Logic</a>
+        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 text-xs uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="utility.html"><span class="material-symbols-outlined text-sm">settings_input_component</span> Utility</a>
+        <a class="flex items-center gap-3 px-4 py-3 text-[#f72585] bg-[#f72585]/10 border-l-4 border-[#f72585] text-xs uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="testsuite.html"><span class="material-symbols-outlined text-sm">fact_check</span> Test Suite</a>
+    </nav>
+</aside>
+
+<!-- Main Content -->
+<main class="ml-64 flex-1 flex flex-col items-center justify-center gap-6 p-12">
+    <span class="material-symbols-outlined text-7xl text-slate-700" style="font-variation-settings:'FILL' 1;">fact_check</span>
+    <h2 class="text-2xl font-bold text-white/60 tracking-tight" style="font-family:'Space Grotesk',sans-serif;">Test Suite View</h2>
+    <p class="text-slate-500 text-sm text-center max-w-md">This page will show detected test files, test coverage estimates, and links to unit/integration tests within the repository.</p>
+    <span class="px-4 py-1.5 rounded-full border border-slate-600 text-slate-400 text-xs font-mono">Coming Soon</span>
+</main>
+
+</body>
+</html>

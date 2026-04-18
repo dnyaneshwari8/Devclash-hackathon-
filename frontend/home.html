@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RepoGraph — Instant architecture maps for any GitHub repo</title>
+<meta name="description" content="Paste a GitHub URL and get an interactive AI-powered architecture map: dependency graph, file summaries, onboarding path, and natural-language search."/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    "surface-lowest": "#0d0d1a",
+                    "surface": "#12121f",
+                    "surface-container": "#1e1e2c",
+                    "surface-high": "#292937",
+                    primary: "#f72585",
+                    secondary: "#4361ee",
+                    tertiary: "#2ec4b6",
+                    "on-surface": "#e3e0f4",
+                    "outline-variant": "#2a2a4a",
+                },
+                fontFamily: {
+                    headline: ["Space Grotesk","sans-serif"],
+                    body: ["Inter","sans-serif"],
+                    mono: ["JetBrains Mono","monospace"]
+                }
+            }
+        }
+    }
+</script>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d0d1a; color: #e3e0f4; font-family: 'Inter', sans-serif; overflow-x: hidden; min-height: 100vh; }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+    /* Animated background graph */
+    #bg-canvas { position: fixed; inset: 0; z-index: 0; opacity: 0.35; pointer-events: none; }
+
+    /* Glass cards */
+    .glass { background: rgba(18,18,31,0.75); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.06); }
+
+    /* Input glow */
+    .url-input:focus { box-shadow: 0 0 0 2px #4361ee55; outline: none; }
+
+    /* Gradient text */
+    .grad-text {
+        background: linear-gradient(135deg, #f72585 0%, #4361ee 50%, #2ec4b6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    /* Feature card hover */
+    .feat-card { transition: transform 0.2s ease, border-color 0.2s ease; }
+    .feat-card:hover { transform: translateY(-4px); border-color: #4361ee66; }
+
+    /* Repo chip */
+    .repo-chip { transition: all 0.15s ease; }
+    .repo-chip:hover { background: rgba(67,97,238,0.15); border-color: #4361ee88; color: #c7d2fe; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 0.8s linear infinite; }
+
+    /* Fade in */
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-up { animation: fadeUp 0.6s ease forwards; }
+    .delay-1 { animation-delay: 0.15s; opacity: 0; }
+    .delay-2 { animation-delay: 0.3s; opacity: 0; }
+    .delay-3 { animation-delay: 0.45s; opacity: 0; }
+
+    /* Pulse dot */
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    .pulse-dot { animation: pulse 2s ease infinite; }
+</style>
+</head>
+<body>
+
+<!-- Animated Background Graph -->
+<svg id="bg-canvas"></svg>
+
+<!-- Navbar -->
+<nav style="position:relative;z-index:10;" class="flex items-center justify-between px-8 py-5 border-b border-[#2a2a4a]">
+    <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-[#4361ee] flex items-center justify-center shadow-lg shadow-[#4361ee]/30">
+            <span class="material-symbols-outlined text-white text-xl" style="font-variation-settings:'FILL' 1;">hub</span>
+        </div>
+        <span class="font-bold text-xl tracking-tight text-white" style="font-family:'Space Grotesk',sans-serif;">RepoGraph</span>
+    </div>
+    <div class="flex items-center gap-4">
+        <a href="index.html" class="text-xs text-slate-400 hover:text-white transition-colors font-mono">Graph View →</a>
+        <span class="text-[10px] font-mono px-3 py-1 rounded-full border border-[#2a2a4a] text-slate-500">v2.0.4</span>
+    </div>
+</nav>
+
+<!-- Hero -->
+<main style="position:relative;z-index:10;" class="max-w-5xl mx-auto px-6 pt-24 pb-32 text-center">
+
+    <!-- Badge -->
+    <div class="fade-up inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#2ec4b6]/30 bg-[#2ec4b6]/10 text-[#2ec4b6] text-xs font-mono mb-8">
+        <span class="w-1.5 h-1.5 rounded-full bg-[#2ec4b6] pulse-dot"></span>
+        AI-powered architecture maps for any GitHub repo
+    </div>
+
+    <!-- Headline -->
+    <h1 class="fade-up delay-1 text-5xl md:text-7xl font-black tracking-tight leading-[1.0] mb-6" style="font-family:'Space Grotesk',sans-serif;">
+        Onboard a senior engineer<br/>
+        <span class="grad-text">in under a minute.</span>
+    </h1>
+
+    <!-- Subtext -->
+    <p class="fade-up delay-2 text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed mb-12">
+        Paste a GitHub URL. RepoGraph clones it, maps every file as a node, draws edges for every import, and generates an interactive dependency graph — with AI summaries, an onboarding path, and natural-language search.
+    </p>
+
+    <!-- URL Input Box -->
+    <div class="fade-up delay-3 glass rounded-2xl p-2 max-w-2xl mx-auto shadow-2xl shadow-[#4361ee]/10 mb-5">
+        <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-slate-500 ml-3 flex-shrink-0">link</span>
+            <input
+                id="repo-input"
+                type="text"
+                placeholder="https://github.com/owner/repo"
+                class="url-input flex-1 bg-transparent border-none text-white font-mono text-sm py-3 transition-all"
+                style="outline:none;"
+                onkeydown="if(event.key==='Enter') goAnalyze()"
+            />
+            <button
+                id="analyze-btn"
+                onclick="goAnalyze()"
+                class="flex items-center gap-2 px-6 py-3 rounded-xl bg-secondary text-white text-sm font-bold hover:opacity-90 active:scale-95 transition-all flex-shrink-0"
+                style="font-family:'Space Grotesk',sans-serif;"
+            >
+                <span id="btn-label">Analyze Repo</span>
+                <span class="material-symbols-outlined text-[18px]" id="btn-arrow">arrow_forward</span>
+                <div class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full spin" id="btn-spin"></div>
+            </button>
+        </div>
+    </div>
+
+    <!-- Sample Repos -->
+    <div class="fade-up delay-3 flex items-center justify-center gap-3 flex-wrap">
+        <span class="text-xs text-slate-600 font-mono">Try:</span>
+        <button class="repo-chip text-[11px] font-mono px-3 py-1 rounded-full border border-[#2a2a4a] text-slate-400 bg-[#1e1e2c]" onclick="setRepo('https://github.com/pmndrs/zustand')">pmndrs/zustand</button>
+        <button class="repo-chip text-[11px] font-mono px-3 py-1 rounded-full border border-[#2a2a4a] text-slate-400 bg-[#1e1e2c]" onclick="setRepo('https://github.com/honojs/hono')">honojs/hono</button>
+        <button class="repo-chip text-[11px] font-mono px-3 py-1 rounded-full border border-[#2a2a4a] text-slate-400 bg-[#1e1e2c]" onclick="setRepo('https://github.com/vercel/swr')">vercel/swr</button>
+    </div>
+
+    <!-- Error message -->
+    <div id="error-msg" class="hidden mt-6 max-w-xl mx-auto px-4 py-3 rounded-xl border border-[#f72585]/30 bg-[#f72585]/10 text-[#f72585] text-sm font-mono"></div>
+
+    <!-- Features -->
+    <div class="mt-32 grid md:grid-cols-3 gap-5 text-left">
+        <div class="feat-card glass rounded-2xl p-6 border border-[#2a2a4a]">
+            <div class="w-10 h-10 rounded-xl bg-[#4361ee]/15 border border-[#4361ee]/30 flex items-center justify-center text-[#4361ee] mb-4">
+                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1;">hub</span>
+            </div>
+            <h3 class="font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif;">Visual Dependency Graph</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">Every file is a node, every import is an edge. Entry points, business logic, and configs are colour-coded so the architecture reads at a glance.</p>
+        </div>
+        <div class="feat-card glass rounded-2xl p-6 border border-[#2a2a4a]">
+            <div class="w-10 h-10 rounded-xl bg-[#f72585]/15 border border-[#f72585]/30 flex items-center justify-center text-[#f72585] mb-4">
+                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1;">auto_stories</span>
+            </div>
+            <h3 class="font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif;">Onboarding Path</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">An ordered reading list of the 5–10 files a new developer should open first to reach a working mental model fast.</p>
+        </div>
+        <div class="feat-card glass rounded-2xl p-6 border border-[#2a2a4a]">
+            <div class="w-10 h-10 rounded-xl bg-[#2ec4b6]/15 border border-[#2ec4b6]/30 flex items-center justify-center text-[#2ec4b6] mb-4">
+                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1;">search</span>
+            </div>
+            <h3 class="font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif;">Ask the Codebase</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">"Where is auth handled?" — get a highlighted subgraph and a plain-English answer. Natural-language search over the entire repo.</p>
+        </div>
+        <div class="feat-card glass rounded-2xl p-6 border border-[#2a2a4a]">
+            <div class="w-10 h-10 rounded-xl bg-[#f72585]/15 border border-[#f72585]/30 flex items-center justify-center text-[#f72585] mb-4">
+                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1;">bolt</span>
+            </div>
+            <h3 class="font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif;">High-Impact Hotspots</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">Files that many others depend on are flagged. You instantly see where a change carries the most risk across the whole codebase.</p>
+        </div>
+        <div class="feat-card glass rounded-2xl p-6 border border-[#2a2a4a]">
+            <div class="w-10 h-10 rounded-xl bg-[#4361ee]/15 border border-[#4361ee]/30 flex items-center justify-center text-[#4361ee] mb-4">
+                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1;">auto_awesome</span>
+            </div>
+            <h3 class="font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif;">AI Summaries on Every Node</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">Each file gets a one-sentence purpose statement. No more guessing what <code class="text-[#4361ee] text-xs">useStreamingClient.ts</code> actually does.</p>
+        </div>
+        <div class="feat-card glass rounded-2xl p-6 border border-[#2a2a4a]">
+            <div class="w-10 h-10 rounded-xl bg-[#2ec4b6]/15 border border-[#2ec4b6]/30 flex items-center justify-center text-[#2ec4b6] mb-4">
+                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1;">public</span>
+            </div>
+            <h3 class="font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif;">Works on Any Public Repo</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">No setup, no installation, no credentials. Paste a GitHub URL and get an architecture map in seconds.</p>
+        </div>
+    </div>
+</main>
+
+<script>
+    // ── Animated background graph ─────────────────────────────────────
+    (function () {
+        const svg = d3.select("#bg-canvas")
+            .attr("width", "100%").attr("height", "100%");
+
+        const W = window.innerWidth, H = window.innerHeight;
+        const N = 28;
+        const nodes = d3.range(N).map(i => ({
+            x: Math.random() * W, y: Math.random() * H,
+            r: 3 + Math.random() * 5
+        }));
+        const links = d3.range(N * 1.2).map(() => ({
+            source: Math.floor(Math.random() * N),
+            target: Math.floor(Math.random() * N)
+        })).filter(l => l.source !== l.target);
+
+        const sim = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).distance(120))
+            .force("charge", d3.forceManyBody().strength(-40))
+            .force("center", d3.forceCenter(W / 2, H / 2))
+            .alphaDecay(0.005);
+
+        const linkEl = svg.append("g").selectAll("line")
+            .data(links).enter().append("line")
+            .attr("stroke", "#4361ee").attr("stroke-opacity", 0.25)
+            .attr("stroke-width", 1);
+
+        const nodeEl = svg.append("g").selectAll("circle")
+            .data(nodes).enter().append("circle")
+            .attr("r", d => d.r)
+            .attr("fill", (_, i) => i % 3 === 0 ? "#f72585" : i % 3 === 1 ? "#4361ee" : "#2ec4b6")
+            .attr("fill-opacity", 0.5);
+
+        sim.on("tick", () => {
+            linkEl.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+                  .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+            nodeEl.attr("cx", d => d.x).attr("cy", d => d.y);
+        });
+    })();
+
+    // ── UI Logic ──────────────────────────────────────────────────────
+    function setRepo(url) {
+        document.getElementById("repo-input").value = url;
+        document.getElementById("repo-input").focus();
+    }
+
+    function goAnalyze() {
+        const url = document.getElementById("repo-input").value.trim();
+        const errEl = document.getElementById("error-msg");
+
+        if (!url) {
+            errEl.textContent = "Please enter a GitHub repository URL.";
+            errEl.classList.remove("hidden");
+            return;
+        }
+        if (!url.startsWith("https://github.com/")) {
+            errEl.textContent = "Please enter a valid GitHub URL starting with https://github.com/";
+            errEl.classList.remove("hidden");
+            return;
+        }
+        errEl.classList.add("hidden");
+
+        // Show spinner
+        document.getElementById("btn-label").textContent = "Analyzing…";
+        document.getElementById("btn-arrow").classList.add("hidden");
+        document.getElementById("btn-spin").classList.remove("hidden");
+        document.getElementById("analyze-btn").disabled = true;
+
+        // Navigate to graph page with URL as query param
+        const encoded = encodeURIComponent(url);
+        window.location.href = `index.html?repo=${encoded}`;
+    }
+</script>
+</body>
+</html>

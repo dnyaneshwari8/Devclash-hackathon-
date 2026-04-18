@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RepoGraph - Architecture View</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link href="style.css" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    surface: "#12121f",
+                    "surface-container-lowest": "#0d0d1a",
+                    "surface-container": "#1e1e2c",
+                    "surface-container-high": "#292937",
+                    primary: "#f72585",
+                    secondary: "#4361ee",
+                    tertiary: "#2ec4b6",
+                    "on-surface": "#e3e0f4",
+                    "outline-variant": "#2a2a4a",
+                },
+                fontFamily: {
+                    headline: ["Space Grotesk","sans-serif"],
+                    body: ["Inter","sans-serif"],
+                    mono: ["JetBrains Mono","monospace"]
+                }
+            }
+        }
+    }
+</script>
+<style>
+    body { background-color: #0d0d1a; margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    #graph-container { width: 100%; height: 100%; }
+
+    .node-circle { cursor: pointer; }
+    .active-glow { filter: drop-shadow(0 0 18px rgba(247,37,133,1)); }
+
+    .link-line { transition: stroke-opacity 0.2s; }
+    .link-line.highlighted { stroke-opacity: 0.9 !important; stroke-width: 2.5px !important; }
+    .link-line.dimmed { stroke-opacity: 0.03 !important; }
+
+    .node-label {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 10px;
+        fill: #b0adcc;
+        pointer-events: none;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+
+    .glass-panel {
+        background: rgba(13,13,26,0.88);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #0d0d1a; }
+    ::-webkit-scrollbar-thumb { background: #343342; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #f72585; }
+
+    .collapsible-content {
+        max-height: 800px;
+        overflow: hidden;
+        transition: max-height 0.4s ease, opacity 0.3s ease;
+    }
+    .collapsed .collapsible-content { max-height: 0; opacity: 0; pointer-events: none; }
+
+    #loading-overlay {
+        position: fixed; inset: 0;
+        background: rgba(13,13,26,0.96);
+        z-index: 200;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 14px;
+    }
+    #loading-overlay.hidden { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 44px; height: 44px; border: 3px solid rgba(67,97,238,0.2); border-top-color: #4361ee; border-radius: 50%; animation: spin 0.75s linear infinite; }
+</style>
+</head>
+
+<body class="bg-[#0d0d1a] text-[#e3e0f4] overflow-hidden w-screen h-screen">
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+    <div class="spinner"></div>
+    <p class="text-sm font-mono text-[#4361ee]" id="loading-label">Analyzing repository…</p>
+    <p class="text-[11px] text-slate-600 font-mono" id="loading-repo"></p>
+</div>
+
+<!-- Top Header -->
+<header class="fixed top-0 left-0 w-full h-[52px] z-[70] bg-[#0a0a1a]/90 backdrop-blur-md border-b border-[#2a2a4a] flex items-center justify-between px-5">
+    <div class="flex items-center gap-3">
+        <a href="home.html" class="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-lg">arrow_back</span>
+        </a>
+        <div class="w-px h-5 bg-[#2a2a4a]"></div>
+        <span class="material-symbols-outlined text-[#4361ee] text-2xl" style="font-variation-settings:'FILL' 1;">hexagon</span>
+        <span class="font-bold text-base tracking-tight text-white" style="font-family:'Space Grotesk',sans-serif;">RepoGraph</span>
+        <div class="w-px h-5 bg-[#2a2a4a]"></div>
+        <span class="text-xs font-mono text-slate-500 truncate max-w-[320px]" id="header-repo">Architecture View</span>
+    </div>
+    <div class="flex items-center gap-2">
+        <div class="flex items-center px-2.5 py-1 bg-[#1e1e2c] border border-[#2a2a4a] rounded-lg">
+            <span class="material-symbols-outlined text-[13px] text-[#2ec4b6] mr-1" style="font-variation-settings:'FILL' 1;">hub</span>
+            <span class="text-[11px] font-mono text-[#e3e0f4]"><span id="nodes-count">—</span> <span class="text-slate-500">nodes</span></span>
+        </div>
+        <div class="flex items-center px-2.5 py-1 bg-[#1e1e2c] border border-[#2a2a4a] rounded-lg">
+            <span class="material-symbols-outlined text-[13px] text-[#4361ee] mr-1" style="font-variation-settings:'FILL' 1;">account_tree</span>
+            <span class="text-[11px] font-mono text-[#e3e0f4]"><span id="edges-count">—</span> <span class="text-slate-500">edges</span></span>
+        </div>
+    </div>
+</header>
+
+<!-- Left Sidebar -->
+<aside class="fixed left-0 top-[52px] h-[calc(100vh-52px)] w-60 z-[40] bg-[#0d0d1a] border-r border-[#2a2a4a] flex flex-col py-5 px-3">
+    <div class="mb-6 px-3">
+        <div class="text-[#f72585] font-black text-[10px] uppercase tracking-widest" style="font-family:'Space Grotesk',sans-serif;">NAVIGATOR</div>
+        <div class="text-slate-600 text-[10px] font-mono mt-0.5">v2.0.4-stable</div>
+    </div>
+    <nav class="flex-1 flex flex-col gap-0.5">
+        <a class="flex items-center gap-3 px-3 py-2.5 text-[#f72585] bg-[#f72585]/10 border-l-[3px] border-[#f72585] text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="index.html">
+            <span class="material-symbols-outlined text-sm">hub</span> Architecture
+        </a>
+        <a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-200 text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="logic.html">
+            <span class="material-symbols-outlined text-sm">terminal</span> Logic
+        </a>
+        <a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-200 text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="utility.html">
+            <span class="material-symbols-outlined text-sm">settings_input_component</span> Utility
+        </a>
+        <a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-200 text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="testsuite.html">
+            <span class="material-symbols-outlined text-sm">fact_check</span> Test Suite
+        </a>
+    </nav>
+</aside>
+
+<!-- Main Graph Area -->
+<main class="fixed left-60 top-[52px] right-0 bottom-0">
+    <div id="graph-container"></div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none">
+        <span class="material-symbols-outlined text-7xl text-slate-700" style="font-variation-settings:'FILL' 1;">hub</span>
+        <p class="text-slate-500 font-mono text-sm">No graph loaded. <a href="home.html" class="text-[#4361ee] pointer-events-auto underline">Go back and analyze a repo.</a></p>
+    </div>
+
+    <!-- Onboarding Panel (top-left) -->
+    <aside class="absolute top-5 left-5 w-[270px] glass-panel rounded-xl z-[50] shadow-2xl hidden group" id="onboardingPanel">
+        <div class="p-4 cursor-pointer flex items-center justify-between select-none" onclick="document.getElementById('onboardingPanel').classList.toggle('collapsed')">
+            <div>
+                <h2 class="font-bold text-[10px] tracking-[0.12em] text-[#f72585] uppercase flex items-center gap-2" style="font-family:'Space Grotesk',sans-serif;">
+                    <span class="material-symbols-outlined text-[13px]">auto_stories</span> Onboarding Path
+                </h2>
+                <p class="text-[10px] text-slate-500 mt-0.5">Read in this order</p>
+            </div>
+            <span class="material-symbols-outlined text-slate-500 transition-transform group-[.collapsed]:rotate-180">expand_more</span>
+        </div>
+        <div class="collapsible-content">
+            <div class="px-4 pb-4 space-y-2" id="onboarding-list"></div>
+        </div>
+    </aside>
+
+    <!-- Legend (top-right) -->
+    <div class="absolute top-5 right-5 z-30 glass-panel p-4 rounded-lg shadow-xl min-w-[150px]">
+        <div class="text-[9px] font-black tracking-widest text-slate-600 uppercase mb-3 border-b border-[#2a2a4a] pb-2">Legend</div>
+        <div class="space-y-2">
+            <div class="flex items-center gap-2.5"><span class="w-3 h-3 rounded-full bg-[#e85d04]"></span><span class="text-[10px] uppercase text-slate-300">Entry Points</span></div>
+            <div class="flex items-center gap-2.5"><span class="w-3 h-3 rounded-full bg-[#4361ee]"></span><span class="text-[10px] uppercase text-slate-300">Frontend</span></div>
+            <div class="flex items-center gap-2.5"><span class="w-3 h-3 rounded-full bg-[#f72585]"></span><span class="text-[10px] uppercase text-slate-300">Backend</span></div>
+            <div class="flex items-center gap-2.5"><span class="w-3 h-3 rounded-full bg-[#2ec4b6]"></span><span class="text-[10px] uppercase text-slate-300">Config</span></div>
+            <div class="flex items-center gap-2.5"><span class="w-3 h-3 rounded-full bg-[#6c757d]"></span><span class="text-[10px] uppercase text-slate-300">Other</span></div>
+        </div>
+    </div>
+
+    <!-- Active nodes counter (bottom-left) -->
+    <div class="absolute bottom-8 left-6 z-30 pointer-events-none">
+        <div class="flex items-end gap-2">
+            <div class="text-7xl font-black tracking-tighter text-white/10" style="font-family:'Space Grotesk',sans-serif;" id="active-nodes-count">0</div>
+            <div class="text-[10px] text-[#f72585] font-bold uppercase tracking-[0.2em] mb-4">Active Nodes</div>
+        </div>
+    </div>
+
+    <!-- Query Bar (bottom-center) -->
+    <div class="absolute bottom-6 left-0 w-full z-[60] flex flex-col items-center pointer-events-none">
+        <div class="flex gap-2 mb-3 pointer-events-auto" id="query-suggestions">
+            <button class="glass-panel px-4 py-1.5 rounded-full text-[11px] text-slate-400 hover:text-[#f72585] transition-all" onclick="fillQuery('Where is auth handled?')">"Where is auth handled?"</button>
+            <button class="glass-panel px-4 py-1.5 rounded-full text-[11px] text-slate-400 hover:text-[#f72585] transition-all" onclick="fillQuery('Show entry points')">"Show entry points"</button>
+        </div>
+        <div class="w-full max-w-[580px] pointer-events-auto mx-auto flex flex-col">
+            <div class="hidden opacity-0 -translate-y-2 bg-[#1e1e2c] border border-[#2a2a4a] border-b-0 rounded-t-[22px] p-5 transition-all duration-300 ease-out" id="query-result-panel">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="text-[#f72585] text-[10px] font-bold uppercase tracking-widest">AI Response</span>
+                    <button class="text-slate-600 hover:text-white text-[10px] font-bold" onclick="clearQuery()">CLEAR</button>
+                </div>
+                <div class="text-sm text-slate-300 leading-relaxed" id="result-content"></div>
+            </div>
+            <div class="flex items-center bg-[#1e1e2c] border border-[#2a2a4a] rounded-full p-1.5 pl-5 gap-3 shadow-2xl focus-within:ring-1 focus-within:ring-[#f72585]/40 transition-all" id="query-bar">
+                <span class="material-symbols-outlined text-slate-500 text-lg">search</span>
+                <input class="flex-1 bg-transparent border-none text-white text-sm py-2 outline-none font-mono placeholder:text-slate-600" id="query-input" placeholder="Ask the codebase…" type="text" onkeydown="if(event.key==='Enter') submitQuery()"/>
+                <button class="bg-[#f72585] text-white px-5 py-2 rounded-full font-bold text-xs hover:opacity-90 active:scale-95 transition-all" style="font-family:'Space Grotesk',sans-serif;" onclick="submitQuery()">Ask →</button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Right File Inspector -->
+<aside class="fixed right-0 top-[52px] h-[calc(100vh-52px)] w-[320px] z-[80] bg-[#1e1e2c] border-l border-[#2a2a4a] shadow-[-8px_0_30px_rgba(0,0,0,0.5)] flex flex-col transition-transform duration-300 ease-in-out translate-x-full" id="fileInspector">
+    <div class="p-5 pb-4 relative border-b border-[#2a2a4a]/60">
+        <button class="absolute top-4 right-4 text-slate-500 hover:text-white" onclick="closeInspector()">
+            <span class="material-symbols-outlined">close</span>
+        </button>
+        <p class="text-[10px] uppercase tracking-widest text-slate-600 mb-1">File</p>
+        <h2 class="text-lg font-mono font-bold text-white break-all leading-tight" id="inspector-title">—</h2>
+        <div class="flex items-center gap-2 mt-2">
+            <span class="w-2 h-2 rounded-full" id="inspector-dot" style="background:#6c757d;"></span>
+            <span class="text-xs font-semibold text-slate-400" id="inspector-category">—</span>
+        </div>
+    </div>
+    <div class="px-5 py-3 border-b border-[#2a2a4a]/50 flex items-center gap-2">
+        <span class="material-symbols-outlined text-[#2ec4b6] text-sm">info</span>
+        <span class="text-[11px] font-bold text-[#2ec4b6] uppercase tracking-wide" id="inspector-impact">—</span>
+    </div>
+    <div class="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+        <section>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="material-symbols-outlined text-sm text-[#f72585]">auto_awesome</span>
+                <h3 class="text-[10px] uppercase tracking-widest text-white/40 font-semibold">Summary</h3>
+            </div>
+            <div class="bg-[#292937] p-4 rounded-lg border border-[#2a2a4a]/50 text-xs text-slate-300 leading-relaxed" id="inspector-desc">Select a node.</div>
+        </section>
+        <section id="inspector-imports-section" class="hidden">
+            <h3 class="text-[10px] uppercase font-semibold text-white/40 mb-2 tracking-widest">Imports</h3>
+            <div class="flex flex-wrap gap-1.5 text-[10px] font-mono text-slate-400" id="inspector-imports"></div>
+        </section>
+        <section>
+            <h3 class="text-[10px] uppercase font-semibold text-white/40 mb-2 tracking-widest">Code Preview</h3>
+            <pre class="bg-[#292937] p-3 rounded-lg border border-[#2a2a4a]/50 text-[10px] text-slate-400 font-mono overflow-x-auto whitespace-pre-wrap break-all max-h-[200px]" id="inspector-preview">—</pre>
+        </section>
+    </div>
+    <div class="p-5 border-t border-[#2a2a4a]">
+        <a id="inspector-link" href="#" target="_blank" class="block w-full py-3 bg-gradient-to-r from-[#f72585] to-[#4361ee] text-white font-bold text-[11px] uppercase tracking-widest rounded-lg hover:opacity-90 active:scale-95 transition-all text-center" style="font-family:'Space Grotesk',sans-serif;">
+            Open on GitHub
+        </a>
+    </div>
+</aside>
+
+<!-- Tooltip -->
+<div class="fixed pointer-events-none z-[100] glass-panel px-3 py-1.5 text-[10px] font-mono text-white rounded hidden" id="tooltip"></div>
+
+<script>
+    const API_URL = "http://localhost:8000";
+
+    const CAT_COLORS = {
+        entry:    "#e85d04",
+        frontend: "#4361ee",
+        backend:  "#f72585",
+        config:   "#2ec4b6",
+        other:    "#6c757d"
+    };
+
+    let nodeEl, linkEl, currentNodes = [], currentLinks = [], repoUrl = "";
+
+    function getColor(n) {
+        if (n.role === "entry") return CAT_COLORS.entry;
+        return CAT_COLORS[n.type] || CAT_COLORS.other;
+    }
+
+    function getRadius(n) {
+        const base = 30;
+        const entryBonus = (n.role === "entry") ? 20 : 0;
+        const importBonus = Math.min((n.imports || []).length * 3, 20);
+        return base + entryBonus + importBonus;
+    }
+
+    // ── Auto-analyze on page load ──────────────────────────────────────
+    window.addEventListener("DOMContentLoaded", () => {
+        const params = new URLSearchParams(window.location.search);
+        repoUrl = params.get("repo") || "";
+        if (repoUrl) {
+            document.getElementById("loading-repo").textContent = repoUrl;
+            document.getElementById("header-repo").textContent = repoUrl.replace("https://github.com/", "");
+            analyze(repoUrl);
+        } else {
+            document.getElementById("loading-overlay").classList.add("hidden");
+            document.getElementById("empty-state").classList.remove("hidden");
+        }
+    });
+
+    async function analyze(url) {
+        document.getElementById("loading-overlay").classList.remove("hidden");
+        try {
+            const res = await fetch(`${API_URL}/analyze-repo`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ repoUrl: url })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+
+            document.getElementById("nodes-count").textContent = data.nodes.length;
+            document.getElementById("edges-count").textContent = data.edges.length;
+            document.getElementById("active-nodes-count").textContent = data.nodes.length;
+
+            renderGraph(data);
+            renderOnboarding(data.onboarding_path, data.nodes);
+        } catch (e) {
+            document.getElementById("loading-label").textContent = "Error: " + e.message;
+            document.getElementById("loading-label").style.color = "#f72585";
+            document.getElementById("loading-overlay").classList.remove("hidden");
+        } finally {
+            document.getElementById("loading-overlay").classList.add("hidden");
+        }
+    }
+
+    // ── D3 Graph Rendering ─────────────────────────────────────────────
+    function renderGraph(data) {
+        d3.select("#graph-container").selectAll("*").remove();
+
+        // Clone nodes
+        const nodes = data.nodes.map(n => ({ ...n }));
+        const nodeIds = new Set(nodes.map(n => n.id));
+
+        // Real edges from backend
+        let links = (data.edges || [])
+            .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+            .map(e => ({ source: e.source, target: e.target, real: true }));
+
+        // ── Synthetic edges so there's always structure ───────────────
+        // 1. Chain nodes in the same folder together
+        const byFolder = {};
+        nodes.forEach(n => {
+            const folder = n.folder || "root";
+            if (!byFolder[folder]) byFolder[folder] = [];
+            byFolder[folder].push(n.id);
+        });
+        Object.values(byFolder).forEach(ids => {
+            for (let i = 0; i < ids.length - 1 && i < 30; i++) {
+                const hasLink = links.some(l =>
+                    (l.source === ids[i] && l.target === ids[i+1]) ||
+                    (l.source === ids[i+1] && l.target === ids[i])
+                );
+                if (!hasLink) links.push({ source: ids[i], target: ids[i+1], real: false });
+            }
+        });
+
+        // 2. Entry nodes connect outward to 4 other nodes
+        nodes.filter(n => n.role === "entry").forEach(en => {
+            nodes.filter(n => n.role !== "entry").slice(0, 4).forEach(o => {
+                const hasLink = links.some(l =>
+                    (l.source === en.id && l.target === o.id) ||
+                    (l.source === o.id && l.target === en.id)
+                );
+                if (!hasLink) links.push({ source: en.id, target: o.id, real: false });
+            });
+        });
+
+        currentNodes = nodes;
+        currentLinks = links;
+
+        const W = document.getElementById("graph-container").clientWidth;
+        const H = document.getElementById("graph-container").clientHeight;
+
+        const svg = d3.select("#graph-container").append("svg")
+            .attr("width", "100%")
+            .attr("height", "100%")
+            .call(d3.zoom().scaleExtent([0.1, 5]).on("zoom", e => g.attr("transform", e.transform)))
+            .on("click", ev => {
+                if (ev.target.tagName === "svg" || ev.target.tagName === "SVG") {
+                    resetSelection(); closeInspector();
+                }
+            });
+
+        // Arrowhead marker for real edges
+        svg.append("defs").append("marker")
+            .attr("id", "arr").attr("viewBox", "0 -4 8 8")
+            .attr("refX", 10).attr("refY", 0)
+            .attr("markerWidth", 5).attr("markerHeight", 5)
+            .attr("orient", "auto")
+            .append("path").attr("d", "M0,-4L8,0L0,4")
+            .attr("fill", "#6a5a7a").attr("fill-opacity", 0.7);
+
+        const g = svg.append("g");
+
+        const sim = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id(d => d.id).distance(d => d.real ? 120 : 150))
+            .force("charge", d3.forceManyBody().strength(-700))
+            .force("center", d3.forceCenter(W / 2, H / 2))
+            .force("collision", d3.forceCollide().radius(d => getRadius(d) + 20));
+
+        // ── DRAW LINKS (straight lines, like in the reference image) ──
+        const lineGroup = g.append("g");
+        const lines = lineGroup.selectAll("line")
+            .data(links)
+            .enter().append("line")
+            .attr("class", "link-line")
+            .attr("stroke", d => d.real ? "#7a6a8a" : "#2e2e4a")
+            .attr("stroke-opacity", d => d.real ? 0.55 : 0.3)
+            .attr("stroke-width", d => d.real ? 1.5 : 1)
+            .attr("marker-end", d => d.real ? "url(#arr)" : null);
+
+        linkEl = lines;
+
+        const tooltip = d3.select("#tooltip");
+
+        // ── DRAW NODES ─────────────────────────────────────────────────
+        const nodeGroups = g.append("g").selectAll("g")
+            .data(nodes)
+            .enter().append("g")
+            .call(d3.drag()
+                .on("start", (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+                .on("drag",  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+                .on("end",   (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+            )
+            .on("mouseover", (ev, d) => {
+                tooltip.style("display", "block")
+                    .html(`<span style="color:${getColor(d)}">[${d.type}]</span> ${d.id.split("/").pop()}`)
+                    .style("left", (ev.pageX + 14) + "px")
+                    .style("top",  (ev.pageY - 10) + "px");
+            })
+            .on("mouseout", () => tooltip.style("display", "none"))
+            .on("click", (ev, d) => { ev.stopPropagation(); selectNode(d); openInspector(d); });
+
+        // Soft outer glow halo
+        nodeGroups.append("circle")
+            .attr("r", d => getRadius(d) + 9)
+            .attr("fill", d => getColor(d))
+            .attr("fill-opacity", 0.10)
+            .attr("stroke", "none")
+            .attr("pointer-events", "none");
+
+        // Main solid circle
+        nodeGroups.append("circle")
+            .attr("class", "node-circle")
+            .attr("r", d => getRadius(d))
+            .attr("fill", d => getColor(d))
+            .attr("fill-opacity", 0.9)
+            .attr("stroke", d => getColor(d))
+            .attr("stroke-width", 2.5)
+            .attr("stroke-opacity", 0.45);
+
+        // Filename label on the RIGHT of the node
+        nodeGroups.append("text")
+            .attr("class", "node-label")
+            .attr("text-anchor", "start")
+            .attr("dx", d => getRadius(d) + 12)
+            .attr("dy", "0.3em")
+            .attr("font-size", "12px")
+            .attr("font-weight", "800")
+            .text(d => {
+                const name = d.id.split("/").pop();
+                return name.length > 25 ? name.slice(0, 23) + "…" : name;
+            });
+
+        nodeEl = nodeGroups;
+
+        // ── TICK: update line positions ────────────────────────────────
+        sim.on("tick", () => {
+            lines
+                .attr("x1", d => {
+                    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                    const len = Math.hypot(dx, dy) || 1;
+                    return d.source.x + (dx / len) * getRadius(d.source);
+                })
+                .attr("y1", d => {
+                    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                    const len = Math.hypot(dx, dy) || 1;
+                    return d.source.y + (dy / len) * getRadius(d.source);
+                })
+                .attr("x2", d => {
+                    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                    const len = Math.hypot(dx, dy) || 1;
+                    return d.target.x - (dx / len) * (getRadius(d.target) + 8);
+                })
+                .attr("y2", d => {
+                    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                    const len = Math.hypot(dx, dy) || 1;
+                    return d.target.y - (dy / len) * (getRadius(d.target) + 8);
+                });
+
+            nodeGroups.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+    }
+
+    // ── Node selection / highlight ─────────────────────────────────────
+    function selectNode(sel) {
+        if (!nodeEl || !linkEl) return;
+        const nb = new Set([sel.id]);
+        currentLinks.forEach(l => {
+            const s = typeof l.source === "object" ? l.source.id : l.source;
+            const t = typeof l.target === "object" ? l.target.id : l.target;
+            if (s === sel.id) nb.add(t);
+            if (t === sel.id) nb.add(s);
+        });
+        nodeEl.style("opacity", d => nb.has(d.id) ? 1 : 0.07);
+        nodeEl.selectAll("circle.node-circle").classed("active-glow", d => d && d.id === sel.id);
+        linkEl.classed("highlighted", l => {
+            const s = typeof l.source === "object" ? l.source.id : l.source;
+            const t = typeof l.target === "object" ? l.target.id : l.target;
+            return nb.has(s) && nb.has(t);
+        }).classed("dimmed", l => {
+            const s = typeof l.source === "object" ? l.source.id : l.source;
+            const t = typeof l.target === "object" ? l.target.id : l.target;
+            return !(nb.has(s) && nb.has(t));
+        });
+    }
+
+    function resetSelection() {
+        if (!nodeEl || !linkEl) return;
+        nodeEl.style("opacity", 1);
+        nodeEl.selectAll("circle.node-circle").classed("active-glow", false);
+        linkEl.classed("highlighted", false).classed("dimmed", false);
+    }
+
+    // ── Inspector ──────────────────────────────────────────────────────
+    function openInspector(d) {
+        document.getElementById("fileInspector").classList.remove("translate-x-full");
+        document.getElementById("inspector-title").textContent = d.id;
+        document.getElementById("inspector-category").textContent = (d.type || "unknown").toUpperCase();
+        document.getElementById("inspector-dot").style.background = getColor(d);
+        document.getElementById("inspector-desc").textContent = d.summary || "No summary available.";
+        document.getElementById("inspector-impact").textContent = "Role: " + (d.role || "general").toUpperCase();
+        document.getElementById("inspector-preview").textContent = d.preview || "—";
+        const imports = d.imports || [];
+        if (imports.length > 0) {
+            document.getElementById("inspector-imports-section").classList.remove("hidden");
+            document.getElementById("inspector-imports").innerHTML = imports.slice(0, 12)
+                .map(i => `<span class="bg-[#1e1e2c] border border-[#2a2a4a] px-2 py-1 rounded">${i.split("/").pop()}</span>`).join("");
+        } else {
+            document.getElementById("inspector-imports-section").classList.add("hidden");
+        }
+        if (repoUrl) document.getElementById("inspector-link").href = `${repoUrl}/blob/main/${d.id}`;
+    }
+
+    function closeInspector() {
+        document.getElementById("fileInspector").classList.add("translate-x-full");
+    }
+
+    // ── Onboarding panel ───────────────────────────────────────────────
+    function renderOnboarding(paths, allNodes) {
+        if (!paths || !paths.length) return;
+        const panel = document.getElementById("onboardingPanel");
+        panel.classList.remove("hidden");
+        const list = document.getElementById("onboarding-list");
+        list.innerHTML = "";
+        paths.slice(0, 7).forEach((p, i) => {
+            const n = allNodes.find(x => x.id === p);
+            const el = document.createElement("div");
+            el.className = "flex gap-2.5 p-2.5 rounded-lg bg-[#1e1e2c]/60 hover:bg-[#292937] border border-[#2a2a4a]/40 transition-all cursor-pointer";
+            el.onclick = () => {
+                const node = currentNodes.find(x => x.id === p);
+                if (node) { selectNode(node); openInspector(node); }
+            };
+            el.innerHTML = `
+                <div class="flex-shrink-0 w-5 h-5 rounded-full bg-[#4361ee] flex items-center justify-center text-[9px] font-bold text-white">${i+1}</div>
+                <div>
+                    <div class="font-mono text-[11px] text-white">${p.split("/").pop()}</div>
+                    <div class="text-[10px] text-slate-500 mt-0.5">${n ? n.summary : "—"}</div>
+                </div>`;
+            list.appendChild(el);
+        });
+    }
+
+    // ── Query bar ──────────────────────────────────────────────────────
+    function fillQuery(txt) {
+        document.getElementById("query-input").value = txt;
+        submitQuery();
+    }
+
+    async function submitQuery() {
+        const val = document.getElementById("query-input").value.trim();
+        if (!val) return;
+        const match = currentNodes.find(n => val.toUpperCase().includes(n.id.split("/").pop().toUpperCase()));
+        if (match) { selectNode(match); openInspector(match); }
+
+        document.getElementById("query-suggestions").classList.add("hidden");
+        document.getElementById("result-content").innerHTML = `<span class="text-slate-500 animate-pulse">Querying…</span>`;
+        const rp = document.getElementById("query-result-panel");
+        rp.classList.remove("hidden");
+        setTimeout(() => rp.classList.remove("opacity-0", "-translate-y-2"), 10);
+        document.getElementById("query-bar").classList.replace("rounded-full", "rounded-b-[22px]");
+
+        try {
+            const res = await fetch(`${API_URL}/query-repo`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: val, nodes: currentNodes.map(n => ({ path: n.id, summary: n.summary, category: n.type })) })
+            });
+            const data = await res.json();
+            document.getElementById("result-content").textContent = data.explanation || "No answer.";
+            if (data.relevant_paths?.length) {
+                const first = currentNodes.find(n => data.relevant_paths.includes(n.id));
+                if (first) { selectNode(first); openInspector(first); }
+            }
+        } catch (e) {
+            document.getElementById("result-content").textContent = "Error: " + e.message;
+        }
+    }
+
+    function clearQuery() {
+        document.getElementById("query-input").value = "";
+        const rp = document.getElementById("query-result-panel");
+        rp.classList.add("opacity-0", "-translate-y-2");
+        setTimeout(() => {
+            rp.classList.add("hidden");
+            document.getElementById("query-bar").classList.replace("rounded-b-[22px]", "rounded-full");
+            document.getElementById("query-suggestions").classList.remove("hidden");
+        }, 300);
+        resetSelection(); closeInspector();
+    }
+</script>
+</body>
+</html>
