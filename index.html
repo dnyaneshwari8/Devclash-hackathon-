@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repograph Clone</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="logo">
+            <div class="logo-box">☩</div>
+            <span>Repograph</span>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="badge">✨ AI-powered architecture maps for any GitHub repo</div>
+        <h1>Onboard a senior engineer <br> <span class="purple-gradient">in under a minute.</span></h1>
+        <p class="description">
+            Paste a GitHub URL. Repograph parses the source, ranks every file by impact, and <br>
+            generates an interactive map of the codebase — with AI summaries, an onboarding <br>
+            path, and natural-language search.
+        </p>
+
+        <div class="search-container">
+            <div class="search-box">
+                <div class="input-group">
+                    <span class="link-icon">🔗</span>
+                    <input type="text" id="repo-input" placeholder="https://github.com/owner/repo">
+                </div>
+                <button id="analyze-btn">Map repo <span>→</span></button>
+            </div>
+        </div>
+
+        <div class="suggestions">
+            Try: <button class="chip">vercel/swr</button> <button class="chip">honojs/hono</button> <button class="chip">pmndrs/zustand</button>
+        </div>
+    </header>
+
+    <section class="features-grid">
+        <div class="feature-card">
+            <div class="icon-wrapper">🕸️</div>
+            <h3>Visual dependency graph</h3>
+            <p>Every file is a node, every import is an edge. Entry points, business logic, utilities and integrations are color-coded.</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon-wrapper">📖</div>
+            <h3>Generated onboarding path</h3>
+            <p>An ordered reading list of the 5–10 files a new developer should open first to reach a working mental model fast.</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon-wrapper">🔍</div>
+            <h3>Ask the codebase</h3>
+            <p>“Where is auth handled?” Get a highlighted subgraph and a plain-English answer in seconds.</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon-wrapper">⚡</div>
+            <h3>High-impact hotspots</h3>
+            <p>Files that many others depend on are flagged. You instantly see where a change carries the most risk.</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon-wrapper">✨</div>
+            <h3>AI summaries on every node</h3>
+            <p>Each file gets a one-sentence purpose statement, no more guessing what code actually does.</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon-wrapper">🐙</div>
+            <h3>Works on any public repo</h3>
+            <p>No setup, no installation, no credentials. Paste a URL — get an architecture map.</p>
+        </div>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>
