@@ -77,6 +77,18 @@
     /* Pulse dot */
     @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
     .pulse-dot { animation: pulse 2s ease infinite; }
+
+    /* Token Panel */
+    #token-panel {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.4s ease, opacity 0.3s;
+        opacity: 0;
+    }
+    #token-panel.open {
+        max-height: 300px;
+        opacity: 1;
+    }
 </style>
 </head>
 <body>
@@ -119,7 +131,7 @@
     </p>
 
     <!-- URL Input Box -->
-    <div class="fade-up delay-3 glass rounded-2xl p-2 max-w-2xl mx-auto shadow-2xl shadow-[#4361ee]/10 mb-5">
+    <div class="fade-up delay-3 glass rounded-2xl p-2 max-w-2xl mx-auto shadow-2xl shadow-[#4361ee]/10 mb-4">
         <div class="flex items-center gap-3">
             <span class="material-symbols-outlined text-slate-500 ml-3 flex-shrink-0">link</span>
             <input
@@ -140,6 +152,30 @@
                 <span class="material-symbols-outlined text-[18px]" id="btn-arrow">arrow_forward</span>
                 <div class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full spin" id="btn-spin"></div>
             </button>
+        </div>
+    </div>
+
+    <!-- Token Panel (hidden by default) -->
+    <div id="token-panel" class="fade-up delay-3 glass rounded-2xl p-4 max-w-2xl mx-auto shadow-xl text-left border-[#f72585]/30 mb-5 relative z-[20]">
+        <div class="flex items-center gap-2 text-[#f72585] mb-2 font-bold" style="font-family:'Space Grotesk',sans-serif;">
+            <span class="material-symbols-outlined text-lg">lock</span>
+            Private Repository Detected
+        </div>
+        <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+            Your token is used once for cloning and immediately discarded. It is never logged or stored on our server. 
+            <a href="https://github.com/settings/tokens/new" target="_blank" class="text-[#4361ee] hover:underline whitespace-nowrap">How to create a token →</a> (Needs <code class="bg-[#1e1e2c] border border-[#2a2a4a] px-1 rounded">repo</code> scope only)
+        </p>
+        <div class="flex items-center gap-3">
+            <input
+                id="token-input"
+                type="password"
+                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                class="url-input flex-1 bg-[#1e1e2c] border border-[#2a2a4a] text-white font-mono text-sm py-2 px-3 rounded-lg transition-all"
+                style="outline:none;"
+                onkeydown="if(event.key==='Enter') continueWithToken()"
+            />
+            <button onclick="continueWithToken()" class="px-5 py-2 rounded-lg bg-[#4361ee] text-white text-xs font-bold hover:opacity-90 transition-all">Analyze with Token</button>
+            <button onclick="cancelToken()" class="px-4 py-2 rounded-lg border border-[#2a2a4a] hover:bg-[#2a2a4a]/50 text-slate-300 text-xs font-bold transition-all">Cancel</button>
         </div>
     </div>
 
@@ -248,9 +284,10 @@
         document.getElementById("repo-input").focus();
     }
 
-    function goAnalyze() {
+    async function goAnalyze() {
         const url = document.getElementById("repo-input").value.trim();
         const errEl = document.getElementById("error-msg");
+        const tokenPanel = document.getElementById("token-panel");
 
         if (!url) {
             errEl.textContent = "Please enter a GitHub repository URL.";
@@ -263,16 +300,65 @@
             return;
         }
         errEl.classList.add("hidden");
+        tokenPanel.classList.remove("open");
 
         // Show spinner
-        document.getElementById("btn-label").textContent = "Analyzing…";
+        document.getElementById("btn-label").textContent = "Checking…";
         document.getElementById("btn-arrow").classList.add("hidden");
         document.getElementById("btn-spin").classList.remove("hidden");
         document.getElementById("analyze-btn").disabled = true;
 
-        // Navigate to graph page with URL as query param
-        const encoded = encodeURIComponent(url);
-        window.location.href = `index.html?repo=${encoded}`;
+        try {
+            const res = await fetch("http://localhost:8000/check-repo", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ repo_url: url })
+            });
+            const data = await res.json();
+            
+            if (data.accessible) {
+                document.getElementById("btn-label").textContent = "Analyzing…";
+                const encoded = encodeURIComponent(url);
+                window.location.href = `index.html?repo=${encoded}`;
+            } else if (data.private) {
+                tokenPanel.classList.add("open");
+                document.getElementById("btn-label").textContent = "Analyze Repo";
+                document.getElementById("btn-arrow").classList.remove("hidden");
+                document.getElementById("btn-spin").classList.add("hidden");
+                document.getElementById("analyze-btn").disabled = false;
+                document.getElementById("token-input").focus();
+            } else {
+                throw new Error("Repository checking failed or unknown error.");
+            }
+        } catch (e) {
+            errEl.textContent = "Error connecting to backend: " + e.message;
+            errEl.classList.remove("hidden");
+            
+            document.getElementById("btn-label").textContent = "Analyze Repo";
+            document.getElementById("btn-arrow").classList.remove("hidden");
+            document.getElementById("btn-spin").classList.add("hidden");
+            document.getElementById("analyze-btn").disabled = false;
+        }
+    }
+
+    function continueWithToken() {
+        const token = document.getElementById("token-input").value.trim();
+        if (!token) return;
+        
+        const url = document.getElementById("repo-input").value.trim();
+        sessionStorage.setItem("gh_token", token);
+        
+        document.getElementById("btn-label").textContent = "Analyzing…";
+        document.getElementById("btn-arrow").classList.add("hidden");
+        document.getElementById("btn-spin").classList.remove("hidden");
+        document.getElementById("analyze-btn").disabled = true;
+        
+        window.location.href = `index.html?repo=${encodeURIComponent(url)}`;
+    }
+    
+    function cancelToken() {
+        document.getElementById("token-panel").classList.remove("open");
+        document.getElementById("token-input").value = "";
     }
 </script>
 </body>

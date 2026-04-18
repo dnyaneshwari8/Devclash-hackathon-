@@ -286,7 +286,10 @@
         repoUrl = params.get("repo") || "";
         if (repoUrl) {
             document.getElementById("loading-repo").textContent = repoUrl;
-            document.getElementById("header-repo").textContent = repoUrl.replace("https://github.com/", "");
+            
+            const hasToken = !!sessionStorage.getItem("gh_token");
+            document.getElementById("header-repo").innerHTML = (hasToken ? '<span title="Private Repo">🔒 </span>' : '') + repoUrl.replace("https://github.com/", "");
+            
             analyze(repoUrl);
         } else {
             document.getElementById("loading-overlay").classList.add("hidden");
@@ -295,12 +298,13 @@
     });
 
     async function analyze(url) {
+        const token = sessionStorage.getItem("gh_token") || "";
         document.getElementById("loading-overlay").classList.remove("hidden");
         try {
             const res = await fetch(`${API_URL}/analyze-repo`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ repoUrl: url })
+                body: JSON.stringify({ repo_url: url, token: token })
             });
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
@@ -311,12 +315,13 @@
 
             renderGraph(data);
             renderOnboarding(data.onboarding_path, data.nodes);
+            document.getElementById("loading-overlay").classList.add("hidden");
         } catch (e) {
             document.getElementById("loading-label").textContent = "Error: " + e.message;
             document.getElementById("loading-label").style.color = "#f72585";
-            document.getElementById("loading-overlay").classList.remove("hidden");
+            document.querySelector(".spinner").style.display = "none";
         } finally {
-            document.getElementById("loading-overlay").classList.add("hidden");
+            sessionStorage.removeItem("gh_token");
         }
     }
 

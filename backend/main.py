@@ -1,12 +1,23 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import git
 import os
 import shutil
 import re
 import stat
+import requests
+from urllib.parse import urlparse, quote
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ✅ Fix Windows permission issue
@@ -17,6 +28,42 @@ def remove_readonly(func, path, _):
 
 class RepoRequest(BaseModel):
     repo_url: str
+    token: str = ""
+
+
+@app.post("/check-repo")
+def check_repo(data: RepoRequest):
+    # Parse owner/repo from URL
+    parts = data.repo_url.rstrip("/").split("/")
+    owner, repo = parts[-2], parts[-1]
+    
+    headers = {"Accept": "application/vnd.github+json"}
+    if data.token:
+        headers["Authorization"] = f"Bearer {data.token}"
+    
+    r = requests.get(
+        f"https://api.github.com/repos/{owner}/{repo}",
+        headers=headers
+    )
+    
+    if r.status_code == 200:
+        info = r.json()
+        return {
+            "accessible": True,
+            "private": info.get("private", False),
+            "name": info.get("full_name"),
+            "description": info.get("description", ""),
+            "stars": info.get("stargazers_count", 0),
+            "language": info.get("language", "")
+        }
+    elif r.status_code == 404:
+        return {"accessible": False, "private": True, "reason": "not_found"}
+    elif r.status_code == 403:
+        return {"accessible": False, "private": True, "reason": "rate_limited"}
+    elif r.status_code == 401:
+        return {"accessible": False, "private": True, "reason": "bad_token"}
+    else:
+        return {"accessible": False, "reason": "unknown"}
 
 
 @app.get("/")
@@ -83,7 +130,7 @@ def resolve_relative(source, target):
 # 🔹 MAIN API
 # =========================
 
-@app.post("/analyze")
+@app.post("/analyze-repo")
 def analyze(data: RepoRequest):
     repo_url = data.repo_url
     repo_path = "repo"
@@ -94,7 +141,18 @@ def analyze(data: RepoRequest):
             shutil.rmtree(repo_path, onerror=remove_readonly)
 
         # 🔹 Clone repo
-        git.Repo.clone_from(repo_url, repo_path)
+        if data.token:
+            parsed = urlparse(repo_url)
+            # URL-encode the token to avoid "Malformed input to a URL function" errors
+            safe_token = quote(data.token)
+            auth_url = f"{parsed.scheme}://{safe_token}@{parsed.netloc}{parsed.path}"
+            try:
+                git.Repo.clone_from(auth_url, repo_path)
+            except Exception as e:
+                error_msg = str(e).replace(data.token, "HIDDEN_TOKEN")
+                raise Exception(error_msg)
+        else:
+            git.Repo.clone_from(repo_url, repo_path)
 
         nodes = []
         edges = []
@@ -234,3 +292,17 @@ def analyze(data: RepoRequest):
                 shutil.rmtree(repo_path, onerror=remove_readonly)
         except:
             pass
+
+class QueryRequest(BaseModel):
+    query: str
+    nodes: list
+
+@app.post("/query-repo")
+def query_repo(data: QueryRequest):
+    query_lower = data.query.lower()
+    relevant = [n["path"] for n in data.nodes if query_lower in n["path"].lower() or (n.get("summary") and query_lower in n.get("summary").lower())]
+    
+    return {
+        "explanation": f"Based on your query '{data.query}', we found {len(relevant)} relevant file(s).",
+        "relevant_paths": relevant[:5]
+    }
