@@ -136,9 +136,6 @@
         <a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-200 text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="utility.html">
             <span class="material-symbols-outlined text-sm">settings_input_component</span> Utility
         </a>
-        <a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-200 text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="testsuite.html">
-            <span class="material-symbols-outlined text-sm">fact_check</span> Test Suite
-        </a>
     </nav>
 </aside>
 
@@ -285,6 +282,9 @@
         const params = new URLSearchParams(window.location.search);
         repoUrl = params.get("repo") || "";
         if (repoUrl) {
+            document.querySelectorAll("aside nav a").forEach(a => {
+                if (a.href) a.href = a.href.split('?')[0] + "?repo=" + encodeURIComponent(repoUrl);
+            });
             document.getElementById("loading-repo").textContent = repoUrl;
             
             const hasToken = !!sessionStorage.getItem("gh_token");
@@ -312,6 +312,9 @@
             document.getElementById("nodes-count").textContent = data.nodes.length;
             document.getElementById("edges-count").textContent = data.edges.length;
             document.getElementById("active-nodes-count").textContent = data.nodes.length;
+
+            sessionStorage.setItem("repoData", JSON.stringify(data));
+            sessionStorage.setItem("repoUrl", url);
 
             renderGraph(data);
             renderOnboarding(data.onboarding_path, data.nodes);

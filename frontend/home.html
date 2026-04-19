@@ -156,7 +156,7 @@
     </div>
 
     <!-- Token Panel (hidden by default) -->
-    <div id="token-panel" class="fade-up delay-3 glass rounded-2xl p-4 max-w-2xl mx-auto shadow-xl text-left border-[#f72585]/30 mb-5 relative z-[20]">
+    <div id="token-panel" class="hidden glass rounded-2xl p-4 max-w-2xl mx-auto shadow-xl text-left border-[#f72585]/30 mb-5 relative z-[20]">
         <div class="flex items-center gap-2 text-[#f72585] mb-2 font-bold" style="font-family:'Space Grotesk',sans-serif;">
             <span class="material-symbols-outlined text-lg">lock</span>
             Private Repository Detected
@@ -300,7 +300,8 @@
             return;
         }
         errEl.classList.add("hidden");
-        tokenPanel.classList.remove("open");
+        tokenPanel.classList.add("hidden");
+        tokenPanel.classList.remove("open", "fade-up");
 
         // Show spinner
         document.getElementById("btn-label").textContent = "Checking…";
@@ -321,7 +322,13 @@
                 const encoded = encodeURIComponent(url);
                 window.location.href = `index.html?repo=${encoded}`;
             } else if (data.private) {
-                tokenPanel.classList.add("open");
+                tokenPanel.classList.remove("hidden");
+                
+                // Slight delay to allow display:block to apply before animating max-height or opacity
+                setTimeout(() => {
+                    tokenPanel.classList.add("open", "fade-up");
+                }, 10);
+                
                 document.getElementById("btn-label").textContent = "Analyze Repo";
                 document.getElementById("btn-arrow").classList.remove("hidden");
                 document.getElementById("btn-spin").classList.add("hidden");
@@ -357,7 +364,9 @@
     }
     
     function cancelToken() {
-        document.getElementById("token-panel").classList.remove("open");
+        const tokenPanel = document.getElementById("token-panel");
+        tokenPanel.classList.remove("open", "fade-up");
+        tokenPanel.classList.add("hidden");
         document.getElementById("token-input").value = "";
     }
 </script>

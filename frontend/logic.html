@@ -1,48 +1,331 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
-<head>
+
+<html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>RepoGraph - Logic</title>
+<title>RepoGraph - Logic View</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<link href="style.css" rel="stylesheet"/>
-<script>
-    tailwind.config = {
-        darkMode: "class",
-        theme: { extend: { colors: { surface: "#12121f", "surface-container-lowest": "#0d0d1a", "surface-container": "#1e1e2c", "surface-container-high": "#292937", primary: "#f72585", secondary: "#4361ee", tertiary: "#2ec4b6", "on-surface": "#e3e0f4", "outline-variant": "#2a2a4a" }, fontFamily: { headline: ["Space Grotesk","sans-serif"], mono: ["JetBrains Mono","monospace"] } } }
-    }
-</script>
-<style>body { background-color: #0d0d1a; margin: 0; font-family: 'Inter', sans-serif; } .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }</style>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-tint": "#ffb1c6",
+                      "outline": "#aa8890",
+                      "on-secondary-container": "#a7b4ff",
+                      "tertiary": "#ffb596",
+                      "on-error-container": "#ffdad6",
+                      "background": "#0d0d1a",
+                      "on-tertiary-container": "#4d1900",
+                      "on-tertiary-fixed": "#360f00",
+                      "inverse-surface": "#e3e0f4",
+                      "secondary": "#bac3ff",
+                      "tertiary-container": "#f26411",
+                      "secondary-container": "#0634c7",
+                      "secondary-fixed-dim": "#bac3ff",
+                      "secondary-fixed": "#dee1ff",
+                      "surface-container": "#1e1e2c",
+                      "on-tertiary-fixed-variant": "#7c2e00",
+                      "on-secondary": "#00218d",
+                      "primary-fixed-dim": "#ffb1c6",
+                      "inverse-on-surface": "#2f2f3d",
+                      "primary-fixed": "#ffd9e1",
+                      "on-tertiary": "#581e00",
+                      "inverse-primary": "#ba0060",
+                      "tertiary-fixed-dim": "#ffb596",
+                      "surface-container-low": "#1a1a28",
+                      "on-primary": "#650031",
+                      "surface-container-high": "#292937",
+                      "error": "#ffb4ab",
+                      "surface": "#12121f",
+                      "surface-container-lowest": "#0d0d1a",
+                      "primary-container": "#ff4992",
+                      "primary": "#ffb1c6",
+                      "error-container": "#93000a",
+                      "surface-bright": "#383847",
+                      "on-primary-fixed-variant": "#8e0048",
+                      "on-secondary-fixed-variant": "#0031c4",
+                      "on-primary-fixed": "#3f001c",
+                      "on-error": "#690005",
+                      "surface-container-highest": "#343342",
+                      "on-surface": "#e3e0f4",
+                      "on-background": "#e3e0f4",
+                      "tertiary-fixed": "#ffdbcd",
+                      "outline-variant": "#5a3f47",
+                      "surface-variant": "#343342",
+                      "surface-dim": "#12121f",
+                      "on-secondary-fixed": "#001159",
+                      "on-surface-variant": "#e3bdc6",
+                      "on-primary-container": "#59002a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "fontFamily": {
+                      "headline": ["Space Grotesk"],
+                      "body": ["Inter"],
+                      "label": ["Inter"]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        body { background-color: #0d0d1a; color: #e3e0f4; font-family: 'Inter', sans-serif; overflow: hidden; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-panel { backdrop-filter: blur(12px); background: rgba(30, 30, 44, 0.7); }
+        .neon-line { background: linear-gradient(90deg, #f72585 0%, #4361ee 100%); filter: drop-shadow(0 0 4px rgba(247, 37, 133, 0.5)); height: 2px; }
+        .node-glow-primary { box-shadow: inset 0 0 10px rgba(247, 37, 133, 0.2), 0 0 20px rgba(247, 37, 133, 0.1); }
+        .node-glow-secondary { box-shadow: inset 0 0 10px rgba(67, 97, 238, 0.2), 0 0 20px rgba(67, 97, 238, 0.1); }
+    </style>
 </head>
-<body class="bg-[#0d0d1a] text-[#e3e0f4] w-screen h-screen flex overflow-hidden">
-
-<!-- Left Sidebar -->
-<aside class="fixed left-0 top-0 h-screen w-64 z-40 bg-[#0d0d1a] border-r border-[#2a2a4a] flex flex-col py-6 px-4">
-    <div class="mb-8 px-4">
-        <div class="flex items-center gap-2 mb-4">
-            <span class="material-symbols-outlined text-[#4361ee] text-3xl" style="font-variation-settings:'FILL' 1;">hexagon</span>
-            <span class="font-bold text-xl tracking-tighter text-white" style="font-family:'Space Grotesk',sans-serif;">RepoGraph</span>
-        </div>
-        <div class="text-[#f72585] font-black text-xs uppercase tracking-widest" style="font-family:'Space Grotesk',sans-serif;">NAVIGATOR</div>
-        <div class="text-slate-500 text-[10px] font-mono tracking-widest mt-1">v2.0.4-stable</div>
-    </div>
-    <nav class="flex-1 flex flex-col gap-1">
-        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 text-xs uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="index.html"><span class="material-symbols-outlined text-sm">hub</span> Architecture</a>
-        <a class="flex items-center gap-3 px-4 py-3 text-[#f72585] bg-[#f72585]/10 border-l-4 border-[#f72585] text-xs uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="logic.html"><span class="material-symbols-outlined text-sm">terminal</span> Logic</a>
-        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 text-xs uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="utility.html"><span class="material-symbols-outlined text-sm">settings_input_component</span> Utility</a>
-        <a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-200 text-xs uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;" href="testsuite.html"><span class="material-symbols-outlined text-sm">fact_check</span> Test Suite</a>
-    </nav>
+<body class="h-screen w-full flex overflow-hidden">
+<!-- SideNavBar from JSON -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-[#0d0d1a] bg-gradient-to-r from-[#16162a] to-[#0d0d1a] flex flex-col py-8 px-4 gap-y-6 z-[60]">
+<div class="flex flex-col gap-1 px-2">
+<span class="font-['Space_Grotesk'] font-bold text-xl text-white">RepoGraph</span>
+<span class="text-xs font-['Inter'] tracking-widest text-slate-500 uppercase">V.2.4 Kinetic</span>
+</div>
+<nav class="flex-1 flex flex-col gap-0.5 mt-4">
+    <a href="index.html" class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-200 text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;">
+        <span class="material-symbols-outlined text-sm">hub</span> Architecture
+    </a>
+    <a href="logic.html" class="flex items-center gap-3 px-3 py-2.5 text-[#f72585] bg-[#f72585]/10 border-l-[3px] border-[#f72585] text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;">
+        <span class="material-symbols-outlined text-sm">terminal</span> Logic
+    </a>
+    <a href="utility.html" class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-200 text-[11px] uppercase tracking-widest hover:bg-white/5 transition-all" style="font-family:'Space Grotesk',sans-serif;">
+        <span class="material-symbols-outlined text-sm">settings_input_component</span> Utility
+    </a>
+</nav>
+<div class="mt-auto flex flex-col gap-y-1">
+<button class="bg-[#f72585] text-white py-2 px-4 rounded-md font-['Inter'] text-sm font-bold mb-6 hover:brightness-110 transition-all active:scale-95">Analyze New Repo</button>
+<div class="flex items-center gap-3 py-2 px-4 text-slate-500 hover:text-slate-200 transition-all duration-200 ease-in-out cursor-pointer hover:translate-x-1">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+<span class="font-['Inter'] text-sm tracking-wide">Help</span>
+</div>
+<div class="flex items-center gap-3 py-2 px-4 text-slate-500 hover:text-slate-200 transition-all duration-200 ease-in-out cursor-pointer hover:translate-x-1">
+<span class="material-symbols-outlined" data-icon="terminal">terminal</span>
+<span class="font-['Inter'] text-sm tracking-wide">Logs</span>
+</div>
+</div>
 </aside>
+<div class="flex-1 flex flex-col ml-64 mr-[300px] h-full relative overflow-hidden">
+<!-- TopAppBar from JSON -->
+<header class="fixed top-0 left-64 right-[300px] h-16 bg-[#0d0d1a]/80 backdrop-blur-md flex justify-between items-center px-6 z-50">
+<div class="flex items-center gap-8">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-slate-400 text-sm" data-icon="search">search</span>
+<input class="bg-white/5 border-none rounded-full pl-10 pr-4 py-1.5 text-sm text-on-surface focus:ring-1 focus:ring-[#f72585] w-64 transition-all" placeholder="Search Logic Nodes..." type="text"/>
+</div>
+<div class="hidden md:flex gap-6">
+<span class="text-slate-400 hover:text-white font-['Space_Grotesk'] tracking-tighter uppercase font-bold text-sm cursor-pointer transition-colors duration-300">Dashboard</span>
+<span class="text-slate-400 hover:text-white font-['Space_Grotesk'] tracking-tighter uppercase font-bold text-sm cursor-pointer transition-colors duration-300">Analytics</span>
+<span class="text-slate-400 hover:text-white font-['Space_Grotesk'] tracking-tighter uppercase font-bold text-sm cursor-pointer transition-colors duration-300">Settings</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex gap-4 items-center">
+<span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-white active:scale-95" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-white active:scale-95" data-icon="account_tree">account_tree</span>
+<span class="material-symbols-outlined text-[#f72585] cursor-pointer hover:brightness-125 active:scale-95" data-icon="settings_input_component">settings_input_component</span>
+</div>
+<div class="h-8 w-8 rounded-full bg-surface-container-high border border-white/10 overflow-hidden">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="professional male software architect portrait with moody blue and purple studio lighting background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBH57SQZmSZ2wU8H9E4XvC1XlH8fF-DJKlQQDSXNf12jXkBupM5GMJMNfb_FuffdCAZ-Q4oSS3QSx9v7HDNrFZeq4wdv5IhXZu97MdBc_StGIRGK5PcPcdsnCXE5GbwNBZJZBtu4YlQllYmwPPTHoTqeTm2QuxjsWf5qLt66qnqcw_onix4zEpQ0zmx3YkR9B_Z9Ust7go6mNXe0LicLU6h9ZjA9votH51eQs2rCj30OhBvkTKKd4ICk1CUyRuDkMYWvxf3AeAVsB8"/>
+</div>
+</div>
+</header>
+<!-- Main Content Area: Horizontal Workflow -->
+<main class="mt-16 p-8 h-[calc(100vh-64px)] overflow-x-auto overflow-y-hidden relative bg-[radial-gradient(circle_at_50%_50%,_#16162a_0%,_#0d0d1a_100%)]">
+<div class="flex items-center gap-x-24 h-full min-w-[1200px] relative px-12" id="workflow-wrapper">
+    <!-- Stage 1: API Gateways -->
+    <div class="flex flex-col gap-12 relative z-10" id="col-api">
+        <h3 class="font-headline text-lg font-bold text-tertiary-container tracking-widest uppercase mb-4 flex items-center gap-2">
+            <span class="w-2 h-6 bg-tertiary-container"></span> API Entry
+        </h3>
+    </div>
 
-<!-- Main Content -->
-<main class="ml-64 flex-1 flex flex-col items-center justify-center gap-6 p-12">
-    <span class="material-symbols-outlined text-7xl text-[#4361ee]/30" style="font-variation-settings:'FILL' 1;">terminal</span>
-    <h2 class="text-2xl font-bold text-white/60 tracking-tight" style="font-family:'Space Grotesk',sans-serif;">Logic View</h2>
-    <p class="text-slate-500 text-sm text-center max-w-md">This page will display logic-layer analysis of the repository — function call graphs, control flow, and business logic breakdowns.</p>
-    <span class="px-4 py-1.5 rounded-full border border-[#4361ee]/40 text-[#4361ee] text-xs font-mono">Coming Soon</span>
+    <!-- Connecting Line Group 1 -->
+    <div class="absolute left-[300px] top-[28%] w-24 neon-line"></div>
+    <div class="absolute left-[300px] top-[68%] w-24 neon-line opacity-30"></div>
+
+    <!-- Stage 2: Core Logic Nodes -->
+    <div class="flex flex-col gap-8 relative z-10 pt-24" id="col-core">
+        <h3 class="font-headline text-lg font-bold text-secondary-container tracking-widest uppercase mb-4 flex items-center gap-2">
+            <span class="w-2 h-6 bg-secondary-container"></span> Logic Core
+        </h3>
+    </div>
+
+    <!-- Connecting Line Group 2 -->
+    <div class="absolute left-[660px] top-[45%] w-24 neon-line"></div>
+
+    <!-- Stage 3: Data Connectors -->
+    <div class="flex flex-col gap-8 relative z-10 pt-12" id="col-data">
+        <h3 class="font-headline text-lg font-bold text-on-tertiary-fixed-variant tracking-widest uppercase mb-4 flex items-center gap-2">
+            <span class="w-2 h-6 bg-on-tertiary-fixed-variant"></span> Storage
+        </h3>
+    </div>
+</div>
+<!-- Kinetic Background Grid -->
+<div class="absolute inset-0 z-0 pointer-events-none opacity-10" style="background-image: linear-gradient(#f72585 1px, transparent 1px), linear-gradient(90deg, #f72585 1px, transparent 1px); background-size: 40px 40px;"></div>
 </main>
+</div>
+<!-- Fixed Right File Inspector Panel -->
+<aside class="fixed right-0 top-0 h-full w-[300px] bg-[#1a1a28] border-l border-white/5 flex flex-col z-[60] shadow-2xl">
+<div class="p-6 border-b border-white/5">
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-headline text-lg font-bold text-white tracking-tight">Inspector</h2>
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:text-white" data-icon="close">close</span>
+</div>
+<div class="bg-surface-container-highest p-4 rounded-lg mb-6">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-primary" data-icon="description">description</span>
+<span class="font-headline font-bold text-sm text-white">AuthMiddleware.ts</span>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col">
+<span class="text-[9px] text-slate-500 uppercase">Lines</span>
+<span class="text-xs font-mono">1,420</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[9px] text-slate-500 uppercase">Size</span>
+<span class="text-xs font-mono">42kb</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[9px] text-slate-500 uppercase">Cov.</span>
+<span class="text-xs font-mono text-[#2ec4b6]">94%</span>
+</div>
+</div>
+</div>
+<div class="space-y-6">
+<div>
+<span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3">Dependencies</span>
+<div class="space-y-2">
+<div class="flex items-center justify-between text-xs p-2 bg-white/5 rounded border-l-2 border-[#7b2d8b]">
+<span class="text-slate-300">jsonwebtoken</span>
+<span class="text-[9px] text-slate-500">v8.5.1</span>
+</div>
+<div class="flex items-center justify-between text-xs p-2 bg-white/5 rounded border-l-2 border-[#7b2d8b]">
+<span class="text-slate-300">bcryptjs</span>
+<span class="text-[9px] text-slate-500">v2.4.3</span>
+</div>
+</div>
+</div>
+<div>
+<span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3">Method breakdown</span>
+<div class="space-y-3">
+<div class="group cursor-pointer">
+<div class="flex justify-between items-center text-xs mb-1">
+<span class="text-white font-medium">verifyToken()</span>
+<span class="text-primary text-[10px]">Active</span>
+</div>
+<div class="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-2/3 group-hover:w-full transition-all duration-500"></div>
+</div>
+</div>
+<div class="group cursor-pointer">
+<div class="flex justify-between items-center text-xs mb-1">
+<span class="text-white font-medium">refreshToken()</span>
+<span class="text-slate-500 text-[10px]">Idle</span>
+</div>
+<div class="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-slate-600 w-1/4 group-hover:w-1/2 transition-all duration-500"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-auto p-6 bg-surface-container-lowest/50">
+<button class="w-full py-3 bg-white/5 border border-white/10 text-white font-headline font-bold rounded-lg text-sm hover:bg-white/10 transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="code">code</span>
+                Open in Editor
+            </button>
+</div>
+</aside>
+<!-- Floating Action Button suppressed -->
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const repoUrl = sessionStorage.getItem("repoUrl");
+        document.querySelectorAll("aside nav a").forEach(a => {
+            if (a.href) a.href = a.href.split('?')[0] + (repoUrl ? "?repo=" + encodeURIComponent(repoUrl) : "");
+        });
 
-</body>
-</html>
+        const dataStr = sessionStorage.getItem("repoData");
+        if (!dataStr) return; 
+        const data = JSON.parse(dataStr);
+        
+        const colApi = document.getElementById("col-api");
+        const colCore = document.getElementById("col-core");
+        const colData = document.getElementById("col-data");
+        
+        const apis = data.nodes.filter(n => n.role === "api").slice(0, 4);
+        const cores = data.nodes.filter(n => n.role === "entry" || n.role === "general").slice(0, 5);
+        const datas = data.nodes.filter(n => n.role === "data").slice(0, 4);
+        
+        if(apis.length === 0) apis.push({id:"No API found", role:"api", summary:"-"});
+        if(cores.length === 0) cores.push({id:"No Core found", role:"core", summary:"-"});
+        if(datas.length === 0) datas.push({id:"No Data found", role:"data", summary:"-"});
+        
+        apis.forEach(node => {
+            colApi.innerHTML += `
+            <div class="w-64 glass-panel border border-outline-variant/15 p-4 rounded-lg hover:border-[#f72585]/40 transition-all cursor-pointer group">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-[10px] uppercase tracking-widest text-tertiary-container font-bold">role: api</span>
+                    <span class="material-symbols-outlined text-tertiary-container text-lg" data-icon="api">api</span>
+                </div>
+                <h4 class="font-headline font-bold text-white mb-1 group-hover:text-primary transition-colors truncate">${node.id.split("/").pop()}</h4>
+                <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed">${node.summary || ""}</p>
+                <div class="mt-4 pt-4 border-t border-white/5 flex gap-2">
+                    <span class="px-2 py-0.5 bg-[#e85d04]/20 text-[#e85d04] text-[9px] font-bold uppercase tracking-tighter">IMP: ${node.impact || 0}</span>
+                </div>
+            </div>`;
+        });
+        
+        cores.forEach(node => {
+            colCore.innerHTML += `
+            <div class="w-72 glass-panel border border-outline-variant/15 p-5 rounded-lg hover:border-[#4361ee]/40 transition-all cursor-pointer">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="w-1 h-4 bg-secondary"></span>
+                        <span class="text-[10px] uppercase tracking-widest text-secondary font-bold">role: ${node.role}</span>
+                    </div>
+                    <span class="material-symbols-outlined text-secondary text-lg" data-icon="bolt">bolt</span>
+                </div>
+                <h4 class="font-headline font-bold text-white text-lg truncate">${node.id.split("/").pop()}</h4>
+                <div class="flex flex-col gap-2 mt-4">
+                    <div class="flex justify-between items-center text-[10px] text-slate-500 uppercase font-medium">
+                        <span>Impact</span>
+                        <span class="text-secondary">${node.impact || 0} hits</span>
+                    </div>
+                    <div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                        <div class="bg-secondary h-full" style="width: ${Math.min(100, (node.impact || 2)*20)}%"></div>
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        datas.forEach(node => {
+            colData.innerHTML += `
+            <div class="w-64 glass-panel border border-outline-variant/15 p-4 rounded-lg bg-surface-container-high/50 group cursor-pointer">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="material-symbols-outlined text-[#2ec4b6]" data-icon="database">database</span>
+                    <span class="text-xs font-bold text-white uppercase tracking-wider group-hover:text-[#2ec4b6] transition-colors truncate max-w-[200px]">${node.id.split("/").pop()}</span>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center bg-[#0d0d1a] p-2 rounded">
+                        <span class="text-[10px] text-slate-500">Impact</span>
+                        <span class="text-[10px] font-mono text-[#2ec4b6]">${node.impact || 0}</span>
+                    </div>
+                </div>
+            </div>`;
+        });
+    });
+</script>
+</body></html>

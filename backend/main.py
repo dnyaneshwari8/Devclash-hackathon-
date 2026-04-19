@@ -1,3 +1,4 @@
+import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -20,7 +21,6 @@ app.add_middleware(
 )
 
 
-# ✅ Fix Windows permission issue
 def remove_readonly(func, path, _):
     os.chmod(path, stat.S_IWRITE)
     func(path)
@@ -33,37 +33,30 @@ class RepoRequest(BaseModel):
 
 @app.post("/check-repo")
 def check_repo(data: RepoRequest):
-    # Parse owner/repo from URL
-    parts = data.repo_url.rstrip("/").split("/")
-    owner, repo = parts[-2], parts[-1]
-    
-    headers = {"Accept": "application/vnd.github+json"}
-    if data.token:
-        headers["Authorization"] = f"Bearer {data.token}"
-    
-    r = requests.get(
-        f"https://api.github.com/repos/{owner}/{repo}",
-        headers=headers
-    )
-    
-    if r.status_code == 200:
-        info = r.json()
-        return {
-            "accessible": True,
-            "private": info.get("private", False),
-            "name": info.get("full_name"),
-            "description": info.get("description", ""),
-            "stars": info.get("stargazers_count", 0),
-            "language": info.get("language", "")
-        }
-    elif r.status_code == 404:
-        return {"accessible": False, "private": True, "reason": "not_found"}
-    elif r.status_code == 403:
-        return {"accessible": False, "private": True, "reason": "rate_limited"}
-    elif r.status_code == 401:
-        return {"accessible": False, "private": True, "reason": "bad_token"}
-    else:
-        return {"accessible": False, "reason": "unknown"}
+    repo_url = data.repo_url.rstrip("/")
+    import subprocess
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+
+    try:
+        if data.token:
+            parsed = urlparse(repo_url)
+            safe_token = quote(data.token)
+            auth_url = f"{parsed.scheme}://{safe_token}@{parsed.netloc}{parsed.path}"
+            
+            res = subprocess.run(["git", "ls-remote", auth_url], capture_output=True, env=env, timeout=10)
+            if res.returncode == 0:
+                return {"accessible": True, "private": True}
+            else:
+                return {"accessible": False, "private": True, "reason": "bad_token"}
+        else:
+            res = subprocess.run(["git", "ls-remote", repo_url], capture_output=True, env=env, timeout=10)
+            if res.returncode == 0:
+                return {"accessible": True, "private": False}
+            else:
+                return {"accessible": False, "private": True}
+    except Exception as e:
+        return {"accessible": False, "reason": str(e)}
 
 
 @app.get("/")
@@ -102,32 +95,70 @@ def classify_role(file):
         return "data"
     elif "index" in f or "main" in f:
         return "entry"
+    elif "test" in f or "spec" in f:
+        return "test"
     else:
         return "general"
 
 
 def simple_summary(file):
+    """Fallback summary when AI is unavailable."""
     if file.endswith(".js"):
         return "JavaScript logic file"
+    elif file.endswith(".ts"):
+        return "TypeScript module"
     elif file.endswith(".html"):
         return "UI structure file"
     elif file.endswith(".css"):
-        return "Styling file"
+        return "Stylesheet"
     elif file.endswith(".py"):
-        return "Backend logic file"
+        return "Python backend module"
+    elif file.endswith(".json"):
+        return "Configuration or data file"
     else:
-        return "Other file"
+        return "Project file"
+
+
+def ai_summary(file_path: str, content: str) -> str:
+    """
+    Call Claude API for a one-sentence file summary.
+    Requires ANTHROPIC_API_KEY env variable.
+    Falls back to simple_summary() on any error.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return simple_summary(file_path)
+
+    try:
+        import anthropic  # pip install anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        snippet = content[:800]
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=80,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"File: {file_path}\n\n"
+                    f"Content snippet:\n{snippet}\n\n"
+                    "Write ONE concise sentence (max 20 words) describing what this file does. "
+                    "No preamble, just the sentence."
+                )
+            }]
+        )
+        return message.content[0].text.strip()
+    except Exception:
+        return simple_summary(file_path)
 
 
 def resolve_relative(source, target):
-    """Handles flat + nested paths"""
     return normalize_path(
         os.path.normpath(os.path.join(os.path.dirname(source), target))
     )
 
 
 # =========================
-# 🔹 MAIN API
+# 🔹 MAIN ANALYZE ENDPOINT
 # =========================
 
 @app.post("/analyze-repo")
@@ -136,14 +167,11 @@ def analyze(data: RepoRequest):
     repo_path = "repo"
 
     try:
-        # 🔹 Clean old repo
         if os.path.exists(repo_path):
             shutil.rmtree(repo_path, onerror=remove_readonly)
 
-        # 🔹 Clone repo
         if data.token:
             parsed = urlparse(repo_url)
-            # URL-encode the token to avoid "Malformed input to a URL function" errors
             safe_token = quote(data.token)
             auth_url = f"{parsed.scheme}://{safe_token}@{parsed.netloc}{parsed.path}"
             try:
@@ -154,16 +182,42 @@ def analyze(data: RepoRequest):
         else:
             git.Repo.clone_from(repo_url, repo_path)
 
-        nodes = []
         edges = []
-        file_scores = {}
-        all_files = []
+        file_scores = {}   # path → import count
+        raw_files = []     # (relative_path, filename, content)
+        libraries = []
 
-        skip_dirs = {
-            ".git", "node_modules", "__pycache__", "dist", "build", ".venv"
-        }
+        # Parse package.json
+        pkg_path = os.path.join(repo_path, "package.json")
+        if os.path.exists(pkg_path):
+            try:
+                with open(pkg_path, "r", encoding="utf-8") as f:
+                    pkg = json.load(f)
+                    deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+                    for name, ver in deps.items():
+                        libraries.append({"name": name, "version": str(ver).replace("^", "").replace("~", ""), "type": "npm"})
+            except Exception:
+                pass
 
-        # 🔹 FIRST PASS: Collect files and build scores
+        # Parse requirements.txt
+        req_path = os.path.join(repo_path, "requirements.txt")
+        if os.path.exists(req_path):
+            try:
+                with open(req_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            parts = re.split(r'[=><~]+', line, maxsplit=1)
+                            name = parts[0].strip()
+                            ver = parts[1].strip() if len(parts) > 1 else "latest"
+                            if name:
+                                libraries.append({"name": name, "version": ver, "type": "pip"})
+            except Exception:
+                pass
+
+        skip_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv"}
+
+        # ── Pass 1: walk files, build edges + scores ──────────────────
         for root, dirs, files in os.walk(repo_path):
             dirs[:] = [d for d in dirs if d not in skip_dirs]
 
@@ -177,110 +231,92 @@ def analyze(data: RepoRequest):
                     os.path.relpath(full_path, repo_path)
                 )
 
-                all_files.append((root, file, relative_path))
-
                 try:
                     with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                         content = f.read()
-                except:
+                except Exception:
                     content = ""
 
-                # =========================
-                # 🔹 JS / TS
-                # =========================
+                raw_files.append((relative_path, file, content))
+
+                # JS / TS imports
                 if file.endswith((".js", ".ts")):
                     imports = re.findall(r'import .* from [\'"](.*?)[\'"]', content)
                     requires = re.findall(r'require\([\'"](.*?)[\'"]\)', content)
-
                     for imp in imports + requires:
                         if imp.startswith("."):
                             target = resolve_relative(relative_path, imp)
-
                             edges.append({"source": relative_path, "target": target})
-
                             file_scores[target] = file_scores.get(target, 0) + 1
 
-                # =========================
-                # 🔹 HTML
-                # =========================
+                # HTML script/link tags
                 if file.endswith(".html"):
                     scripts = re.findall(r'<script.*src=["\'](.*?)["\']', content)
                     links = re.findall(r'<link.*href=["\'](.*?)["\']', content)
-
                     for src in scripts + links:
                         if not src.startswith("http"):
                             target = resolve_relative(relative_path, src)
-
                             edges.append({"source": relative_path, "target": target})
-
                             file_scores[target] = file_scores.get(target, 0) + 1
 
-                # =========================
-                # 🔹 PYTHON
-                # =========================
+                # Python imports
                 if file.endswith(".py"):
                     imports = re.findall(r'import (\w+)', content)
-
                     for imp in imports:
                         target = imp + ".py"
                         edges.append({"source": relative_path, "target": target})
 
-        # 🔹 SECOND PASS: Build nodes with impact scores
-        for root, file, relative_path in all_files:
-            full_path = os.path.join(root, file)
+        # ── Pass 2: build nodes (impact score now complete) ───────────
+        # Only call AI for the top 10 highest-impact files to keep latency low
+        top_files = set(
+            sorted(file_scores, key=file_scores.get, reverse=True)[:10]
+        )
 
-            try:
-                with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-            except:
-                content = ""
+        nodes = []
+        for relative_path, file, content in raw_files:
+            impact = file_scores.get(relative_path, 0)
 
-            # ✅ NODE
+            summary = (
+                ai_summary(relative_path, content)
+                if relative_path in top_files
+                else simple_summary(file)
+            )
+
             nodes.append({
                 "id": relative_path,
                 "type": get_file_type(file),
                 "role": classify_role(relative_path),
-                "summary": simple_summary(file),
+                "summary": summary,
+                "impact": impact,          # ✅ FIX: was missing before
                 "preview": content[:200],
-                "folder": relative_path.split("/")[0] if "/" in relative_path else "root",
-                "impact": file_scores.get(relative_path, 0)
+                "folder": relative_path.split("/")[0] if "/" in relative_path else "root"
             })
 
-        # =========================
-        # 🔹 CLEAN EDGES
-        # =========================
+        # ── Clean edges: only keep edges where both ends exist ─────────
         valid_nodes = set(n["id"] for n in nodes)
-
         edges = [
             e for e in edges
             if normalize_path(e["target"]) in valid_nodes
         ]
 
-        # =========================
-        # 🔹 IMPORTANT FILES
-        # =========================
+        # ── Top important files ────────────────────────────────────────
         important_files = sorted(
-            file_scores,
-            key=file_scores.get,
-            reverse=True
+            file_scores, key=file_scores.get, reverse=True
         )[:5]
 
-        # =========================
-        # 🔹 ENTRY POINTS
-        # =========================
+        # ── Entry points ───────────────────────────────────────────────
         entry_points = [
             n["id"] for n in nodes
-            if "index" in n["id"] or "main" in n["id"]
+            if "index" in n["id"].lower() or "main" in n["id"].lower()
         ]
 
-        # =========================
-        # 🔥 ONBOARDING PATH
-        # =========================
-        onboarding_path = entry_points + important_files[:3]
+        # ── Onboarding path: entries first, then top imports ──────────
+        seen = set(entry_points)
+        onboarding_path = entry_points + [
+            f for f in important_files if f not in seen
+        ][:3]
 
-        # =========================
-        # 🔹 LIMIT SIZE
-        # =========================
+        # ── Limit size ─────────────────────────────────────────────────
         nodes = nodes[:200]
         edges = edges[:300]
 
@@ -291,6 +327,7 @@ def analyze(data: RepoRequest):
             "entry_points": entry_points,
             "onboarding_path": onboarding_path,
             "total_files": len(nodes),
+            "libraries": libraries,
             "debug": {
                 "nodes_count": len(nodes),
                 "edges_count": len(edges)
@@ -304,28 +341,41 @@ def analyze(data: RepoRequest):
         try:
             if os.path.exists(repo_path):
                 shutil.rmtree(repo_path, onerror=remove_readonly)
-        except:
+        except Exception:
             pass
+
+
+# =========================
+# 🔹 QUERY ENDPOINT
+# =========================
 
 class QueryRequest(BaseModel):
     query: str
     nodes: list
 
+
 @app.post("/query-repo")
 def query_repo(data: QueryRequest):
     query_lower = data.query.lower()
-    relevant = [
+
+    # ✅ FIX: frontend sends {path, summary, category} — use those keys
+    matched = [
         n for n in data.nodes
-        if query_lower in n["id"].lower() or
-           (n.get("summary") and query_lower in n.get("summary").lower()) or
-           query_lower in n.get("role", "").lower() or
-           query_lower in n.get("type", "").lower()
+        if query_lower in n.get("path", "").lower()
+        or query_lower in n.get("summary", "").lower()
+        or query_lower in n.get("category", "").lower()
     ]
-    
-    # Rank by impact score descending
-    relevant_sorted = sorted(relevant, key=lambda n: n.get("impact", 0), reverse=True)
-    
+
+    # Sort by impact if available, otherwise keep order
+    matched.sort(key=lambda n: n.get("impact", 0), reverse=True)
+
+    relevant_paths = [n["path"] for n in matched[:5]]
+
     return {
-        "explanation": f"Based on your query '{data.query}', we found {len(relevant)} relevant file(s).",
-        "relevant_paths": [n["id"] for n in relevant_sorted[:5]]
+        "explanation": (
+            f"Found {len(matched)} file(s) matching '{data.query}'. "
+            + (f"Top match: {relevant_paths[0]}" if relevant_paths else "No files matched.")
+        ),
+        "relevant_paths": relevant_paths,
+        "results": matched[:5]
     }
